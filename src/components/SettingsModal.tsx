@@ -1,10 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Key, Plus, Trash2, Check, X, ShieldAlert, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  Key,
+  Plus,
+  Trash2,
+  Check,
+  X,
+  ShieldAlert,
+  Loader2,
+  Cpu,
+  Palette,
+  User as UserIcon,
+  Database,
+  Info,
+  Download,
+  AlertTriangle,
+  RotateCcw,
+  Sparkles,
+  ExternalLink,
+} from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import type { UserApiKey, Provider } from "@/types";
+import {
+  AppSettings,
+  SYSTEM_PROMPT_PRESETS,
+  loadSettings,
+  saveSettings,
+  DEFAULT_SETTINGS,
+} from "@/lib/settings";
 
 interface Props {
   open: boolean;
@@ -29,8 +54,8 @@ export const PROVIDERS: ProviderOption[] = [
     defaultBaseUrl: "https://api.groq.com/openai/v1",
     models: [
       { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Tavsiya etiladi)" },
-      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant (Juda tez)" },
-      { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill 70B (Mantiqiy fikrlash)" },
+      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant (Ultra tez)" },
+      { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill 70B (Mantiq)" },
       { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B (32k kontekst)" },
       { id: "gemma2-9b-it", name: "Google Gemma 2 9B" },
     ],
@@ -42,8 +67,8 @@ export const PROVIDERS: ProviderOption[] = [
     defaultModel: "deepseek-chat",
     defaultBaseUrl: "https://api.deepseek.com/v1",
     models: [
-      { id: "deepseek-chat", name: "DeepSeek-V3 (Umumiy universal)" },
-      { id: "deepseek-reasoner", name: "DeepSeek-R1 (Fikrlash / Reasoning)" },
+      { id: "deepseek-chat", name: "DeepSeek-V3 (Universal)" },
+      { id: "deepseek-reasoner", name: "DeepSeek-R1 (Chuqur fikrlash)" },
     ],
   },
   {
@@ -53,10 +78,10 @@ export const PROVIDERS: ProviderOption[] = [
     defaultModel: "gpt-4o",
     defaultBaseUrl: "https://api.openai.com/v1",
     models: [
-      { id: "gpt-4o", name: "GPT-4o (Eng aqlli va ko‘p qirrali)" },
+      { id: "gpt-4o", name: "GPT-4o (Eng aqlli)" },
       { id: "gpt-4o-mini", name: "GPT-4o Mini (Tez va tejamkor)" },
-      { id: "o3-mini", name: "o3-mini (Reasoning / Dasturlash)" },
-      { id: "o1", name: "o1 (Chuqur fikrlovchi model)" },
+      { id: "o3-mini", name: "o3-mini (Reasoning)" },
+      { id: "o1", name: "o1 (Murakkab tahlil)" },
       { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
       { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
     ],
@@ -68,9 +93,9 @@ export const PROVIDERS: ProviderOption[] = [
     defaultModel: "gemini-2.0-flash",
     defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
     models: [
-      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (Yangi avlod, tez)" },
+      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (Yangi avlod)" },
       { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
-      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (2M ulkan kontekst)" },
+      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (2M kontekst)" },
     ],
   },
   {
@@ -122,7 +147,7 @@ export const PROVIDERS: ProviderOption[] = [
     models: [
       { id: "mistral-large-latest", name: "Mistral Large" },
       { id: "mistral-small-latest", name: "Mistral Small" },
-      { id: "codestral-latest", name: "Codestral (Dasturchilar uchun)" },
+      { id: "codestral-latest", name: "Codestral (Dasturchilar)" },
       { id: "open-mistral-nemo", name: "Mistral Nemo" },
     ],
   },
@@ -141,12 +166,12 @@ export const PROVIDERS: ProviderOption[] = [
   },
   {
     value: "perplexity",
-    label: "Perplexity AI (Web qidiruv)",
+    label: "Perplexity AI (Qidiruv)",
     placeholder: "pplx-...",
     defaultModel: "sonar-pro",
     defaultBaseUrl: "https://api.perplexity.ai",
     models: [
-      { id: "sonar-pro", name: "Sonar Pro (Qidiruvli chuqur javob)" },
+      { id: "sonar-pro", name: "Sonar Pro (Qidiruvli chuqur)" },
       { id: "sonar", name: "Sonar (Tezkor qidiruv)" },
       { id: "sonar-reasoning", name: "Sonar Reasoning" },
     ],
@@ -161,13 +186,20 @@ export const PROVIDERS: ProviderOption[] = [
   },
 ];
 
+type SettingsTab = "keys" | "model" | "appearance" | "account" | "data" | "about";
+
 export default function SettingsModal({ open, onClose }: Props) {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
+  const [activeTab, setActiveTab] = useState<SettingsTab>("keys");
+
+  // API Keys state
   const [keys, setKeys] = useState<UserApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [testingKeyId, setTestingKeyId] = useState<string | null>(null);
+  const [keyTestStatus, setKeyTestStatus] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
 
-  // Form state
+  // New key form state
   const [provider, setProvider] = useState<Provider>("groq");
   const [name, setName] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -180,13 +212,48 @@ export default function SettingsModal({ open, onClose }: Props) {
   const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState("");
 
+  // App settings state (Model, Appearance)
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  // Account profile state
+  const [newName, setNewName] = useState("");
+  const [nameSaved, setNameSaved] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passMessage, setPassMessage] = useState("");
+  const [passError, setPassError] = useState("");
+
+  // Data stats
+  const [totalChats, setTotalChats] = useState(0);
+  const [totalMessages, setTotalMessages] = useState(0);
+
   const currentProvider = PROVIDERS.find((p) => p.value === provider) || PROVIDERS[0];
 
   useEffect(() => {
     if (open && user) {
       loadKeys();
+      setAppSettings(loadSettings());
+      loadDataStats();
+      setNewName(user.user_metadata?.full_name || "");
     }
   }, [open, user]);
+
+  async function loadDataStats() {
+    try {
+      const supabase = await getSupabaseBrowserClient();
+      const { count: cCount } = await supabase
+        .from("chats")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user?.id);
+      setTotalChats(cCount || 0);
+
+      const { count: mCount } = await supabase
+        .from("messages")
+        .select("*, chats!inner(user_id)", { count: "exact", head: true })
+        .eq("chats.user_id", user?.id);
+      setTotalMessages(mCount || 0);
+    } catch {}
+  }
 
   async function loadKeys() {
     setLoading(true);
@@ -212,7 +279,33 @@ export default function SettingsModal({ open, onClose }: Props) {
     }
   }
 
-  async function handleSave() {
+  async function testExistingKey(k: UserApiKey) {
+    setTestingKeyId(k.id);
+    setKeyTestStatus(null);
+    try {
+      const res = await fetch("/api/validate-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: k.provider,
+          apiKey: k.api_key,
+          model: k.model,
+          baseUrl: k.base_url || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.valid) {
+        setKeyTestStatus({ id: k.id, ok: true, msg: "Kalit yaroqli va faol!" });
+      } else {
+        setKeyTestStatus({ id: k.id, ok: false, msg: data.error || "Kalit yaroqsiz!" });
+      }
+    } catch (err: any) {
+      setKeyTestStatus({ id: k.id, ok: false, msg: err.message });
+    }
+    setTestingKeyId(null);
+  }
+
+  async function handleSaveKey() {
     setError("");
     const trimmedKey = apiKey.trim();
     const finalModel = isCustomModel ? customModelName.trim() : model.trim();
@@ -229,7 +322,6 @@ export default function SettingsModal({ open, onClose }: Props) {
     setSaving(true);
     setStatusMessage("API kalit tekshirilmoqda...");
 
-    // 1. API kalitni server orqali haqiqiyligini tekshirish
     try {
       const validateRes = await fetch("/api/validate-key", {
         method: "POST",
@@ -245,20 +337,18 @@ export default function SettingsModal({ open, onClose }: Props) {
       const validateData = await validateRes.json();
 
       if (!validateData.valid) {
-        // Kalit xato bo'lsa, SAQLANMAYDI!
         setError(validateData.error || "API kalit yaroqsiz! Saqlanmadi.");
         setSaving(false);
         setStatusMessage("");
         return;
       }
     } catch (err: any) {
-      setError("Tekshirishda xatolik yuz berdi: " + err.message);
+      setError("Tekshirishda xatolik: " + err.message);
       setSaving(false);
       setStatusMessage("");
       return;
     }
 
-    // 2. Kalit to‘g‘ri bo‘lsa, Supabase'ga saqlash
     setStatusMessage("Kalit to‘g‘ri! Saqlanmoqda...");
     const supabase = await getSupabaseBrowserClient();
 
@@ -288,7 +378,6 @@ export default function SettingsModal({ open, onClose }: Props) {
       return;
     }
 
-    // Reset form
     setName("");
     setApiKey("");
     setIsDefault(false);
@@ -300,16 +389,8 @@ export default function SettingsModal({ open, onClose }: Props) {
 
   async function setAsDefault(id: string) {
     const supabase = await getSupabaseBrowserClient();
-    await supabase
-      .from("user_api_keys")
-      .update({ is_default: false })
-      .eq("user_id", user?.id);
-
-    await supabase
-      .from("user_api_keys")
-      .update({ is_default: true })
-      .eq("id", id);
-
+    await supabase.from("user_api_keys").update({ is_default: false }).eq("user_id", user?.id);
+    await supabase.from("user_api_keys").update({ is_default: true }).eq("id", id);
     loadKeys();
   }
 
@@ -320,20 +401,98 @@ export default function SettingsModal({ open, onClose }: Props) {
     loadKeys();
   }
 
+  // Update Settings helper
+  function updateAppSettings(patch: Partial<AppSettings>) {
+    const updated = { ...appSettings, ...patch };
+    setAppSettings(updated);
+    saveSettings(updated);
+  }
+
+  // Update Profile Name
+  async function handleUpdateName() {
+    if (!newName.trim()) return;
+    const supabase = await getSupabaseBrowserClient();
+    const { error } = await supabase.auth.updateUser({
+      data: { full_name: newName.trim() },
+    });
+    if (!error) {
+      setNameSaved(true);
+      setTimeout(() => setNameSaved(false), 2500);
+    }
+  }
+
+  // Change password
+  async function handleChangePassword() {
+    setPassError("");
+    setPassMessage("");
+    if (!newPassword || newPassword.length < 6) {
+      setPassError("Yangi parol kamida 6 ta belgidan iborat bo‘lishi kerak");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPassError("Parollar mos kelmadi");
+      return;
+    }
+    const supabase = await getSupabaseBrowserClient();
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setPassError(error.message);
+    } else {
+      setPassMessage("Parol muvaffaqiyatli yangilandi!");
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+  }
+
+  // Export chats
+  async function handleExportChats() {
+    const supabase = await getSupabaseBrowserClient();
+    const { data: chatsData } = await supabase
+      .from("chats")
+      .select("*, messages(*)")
+      .eq("user_id", user?.id)
+      .order("created_at", { ascending: false });
+
+    const blob = new Blob([JSON.stringify(chatsData || [], null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `mr-ai-chats-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Clear all chats
+  async function handleClearAllChats() {
+    if (!confirm("DIQQAT: Barcha suhbatlar va xabarlar o‘chiriladi. Ushbu amalni ortga qaytarib bo‘lmaydi. Rozimisiz?"))
+      return;
+    const supabase = await getSupabaseBrowserClient();
+    await supabase.from("chats").delete().eq("user_id", user?.id);
+    loadDataStats();
+    window.location.reload();
+  }
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={onClose} />
 
-      {/* Modal */}
-      <div className="relative w-full max-w-lg bg-neutral-900 text-neutral-100 rounded-2xl shadow-2xl border border-neutral-800 max-h-[90vh] flex flex-col">
+      {/* Main Modal Window */}
+      <div className="relative w-full max-w-2xl bg-neutral-900 text-neutral-100 rounded-2xl shadow-2xl border border-neutral-800 max-h-[92vh] flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-800 shrink-0">
           <div className="flex items-center gap-2.5">
-            <Key className="w-5 h-5 text-neutral-300" />
-            <h2 className="text-lg font-semibold text-neutral-100">My API Keys</h2>
+            <div className="w-8 h-8 rounded-lg bg-neutral-800 flex items-center justify-center text-white border border-neutral-700">
+              <Key className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-neutral-100 leading-tight">Sozlamalar (Settings)</h2>
+              <p className="text-xs text-neutral-400">MR AI professional boshqaruv markazi</p>
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -343,261 +502,720 @@ export default function SettingsModal({ open, onClose }: Props) {
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {!showForm ? (
-            <>
-              <p className="text-sm text-neutral-400 mb-4">
-                Istagan AI provayderi uchun o‘z API kalitlaringizni qo‘shing. Kalitlar xavfsiz holda faqat sizning hisobingizda saqlanadi.
-              </p>
+        {/* Tab Navigation */}
+        <div className="flex items-center gap-1 px-4 border-b border-neutral-800 bg-neutral-950/60 overflow-x-auto shrink-0 scrollbar-none py-1">
+          <button
+            onClick={() => setActiveTab("keys")}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+              activeTab === "keys"
+                ? "bg-neutral-800 text-white"
+                : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850"
+            }`}
+          >
+            <Key className="w-3.5 h-3.5" />
+            API Kalitlar
+          </button>
+          <button
+            onClick={() => setActiveTab("model")}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+              activeTab === "model"
+                ? "bg-neutral-800 text-white"
+                : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850"
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            Model & Rol
+          </button>
+          <button
+            onClick={() => setActiveTab("appearance")}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+              activeTab === "appearance"
+                ? "bg-neutral-800 text-white"
+                : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850"
+            }`}
+          >
+            <Palette className="w-3.5 h-3.5" />
+            Ko‘rinish
+          </button>
+          <button
+            onClick={() => setActiveTab("account")}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+              activeTab === "account"
+                ? "bg-neutral-800 text-white"
+                : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850"
+            }`}
+          >
+            <UserIcon className="w-3.5 h-3.5" />
+            Hisob & Profil
+          </button>
+          <button
+            onClick={() => setActiveTab("data")}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+              activeTab === "data"
+                ? "bg-neutral-800 text-white"
+                : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850"
+            }`}
+          >
+            <Database className="w-3.5 h-3.5" />
+            Ma'lumotlar
+          </button>
+          <button
+            onClick={() => setActiveTab("about")}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition cursor-pointer ${
+              activeTab === "about"
+                ? "bg-neutral-800 text-white"
+                : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-850"
+            }`}
+          >
+            <Info className="w-3.5 h-3.5" />
+            Haqida
+          </button>
+        </div>
 
-              {loading ? (
-                <div className="text-center py-8 text-neutral-500 text-sm">Yuklanmoqda...</div>
-              ) : keys.length === 0 ? (
-                <div className="text-center py-10 border border-dashed border-neutral-800 rounded-xl bg-neutral-950/40">
-                  <Key className="w-8 h-8 text-neutral-600 mx-auto mb-3" />
-                  <p className="text-sm text-neutral-400 mb-4">Hali API key qo‘shilmagan</p>
-                  <button
-                    onClick={() => {
-                      setShowForm(true);
-                      onProviderChange("groq");
-                    }}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white text-neutral-950 text-sm font-medium hover:bg-neutral-200 transition cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Key qo‘shish
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {keys.map((k) => (
-                    <div
-                      key={k.id}
-                      className="flex items-center justify-between p-3.5 rounded-xl border border-neutral-800 bg-neutral-950/60"
+        {/* Tab Content Container */}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {/* TAB 1: API KEYS */}
+          {activeTab === "keys" && (
+            <div>
+              {!showForm ? (
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-neutral-100">Mening API Kalitlarim</h3>
+                      <p className="text-xs text-neutral-400">
+                        Barcha kalitlar shifrlangan holatda faqat sizning hisobingizda saqlanadi.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setShowForm(true);
+                        onProviderChange("groq");
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-neutral-950 text-xs font-semibold hover:bg-neutral-200 transition cursor-pointer"
                     >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-sm text-neutral-100 truncate">
-                            {k.name}
-                          </span>
-                          {k.is_default && (
-                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-800/80 text-emerald-300">
-                              DEFAULT
-                            </span>
+                      <Plus className="w-3.5 h-3.5" />
+                      Yangi kalit
+                    </button>
+                  </div>
+
+                  {loading ? (
+                    <div className="text-center py-10 text-neutral-500 text-sm">Yuklanmoqda...</div>
+                  ) : keys.length === 0 ? (
+                    <div className="text-center py-12 border border-dashed border-neutral-800 rounded-xl bg-neutral-950/40">
+                      <Key className="w-9 h-9 text-neutral-600 mx-auto mb-3" />
+                      <p className="text-sm font-medium text-neutral-300">Hali hech qanday API kalit qo‘shilmagan</p>
+                      <p className="text-xs text-neutral-500 mt-1 mb-4 max-w-sm mx-auto">
+                        Suhbatlashish uchun istalgan provayderdan (Groq, OpenAI, Gemini va boshqalar) kalit qo‘shing.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setShowForm(true);
+                          onProviderChange("groq");
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white text-neutral-950 text-xs font-medium hover:bg-neutral-200 transition cursor-pointer"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Birinchi kalitni qo‘shish
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {keys.map((k) => (
+                        <div
+                          key={k.id}
+                          className="p-3.5 rounded-xl border border-neutral-800 bg-neutral-950/60 hover:border-neutral-700/80 transition"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-sm text-neutral-100 truncate">
+                                  {k.name}
+                                </span>
+                                {k.is_default && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800/80 text-emerald-300">
+                                    ASOSIY (DEFAULT)
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-neutral-400 mt-1 flex items-center gap-2">
+                                <span className="px-1.5 py-0.5 rounded bg-neutral-800 font-mono text-[11px] uppercase">
+                                  {k.provider}
+                                </span>
+                                <span>{k.model}</span>
+                              </div>
+                              <div className="text-xs text-neutral-500 mt-1 font-mono">
+                                {k.api_key.slice(0, 8)}••••••••••••
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                              <button
+                                onClick={() => testExistingKey(k)}
+                                disabled={testingKeyId === k.id}
+                                title="Kalitni tekshirish"
+                                className="px-2.5 py-1.5 rounded-lg border border-neutral-800 hover:bg-neutral-800 text-neutral-300 text-xs font-medium transition cursor-pointer flex items-center gap-1"
+                              >
+                                {testingKeyId === k.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                                ) : (
+                                  "Tekshirish"
+                                )}
+                              </button>
+
+                              {!k.is_default && (
+                                <button
+                                  onClick={() => setAsDefault(k.id)}
+                                  title="Asosiy qilish"
+                                  className="p-1.5 rounded-lg hover:bg-neutral-800 transition text-neutral-400 hover:text-white cursor-pointer"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                              )}
+
+                              <button
+                                onClick={() => handleDelete(k.id)}
+                                title="O‘chirish"
+                                className="p-1.5 rounded-lg hover:bg-red-950/50 transition text-neutral-500 hover:text-red-400 cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {keyTestStatus && keyTestStatus.id === k.id && (
+                            <div
+                              className={`mt-2.5 px-3 py-1.5 rounded-lg text-xs flex items-center gap-2 ${
+                                keyTestStatus.ok
+                                  ? "bg-emerald-950/50 text-emerald-300 border border-emerald-900/50"
+                                  : "bg-red-950/50 text-red-300 border border-red-900/50"
+                              }`}
+                            >
+                              {keyTestStatus.ok ? (
+                                <Check className="w-3.5 h-3.5 shrink-0" />
+                              ) : (
+                                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                              )}
+                              <span>{keyTestStatus.msg}</span>
+                            </div>
                           )}
                         </div>
-                        <div className="text-xs text-neutral-400 mt-0.5">
-                          {k.provider.toUpperCase()} · {k.model}
-                        </div>
-                        <div className="text-xs text-neutral-500 mt-0.5 font-mono">
-                          {k.api_key.slice(0, 8)}••••••••
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {!k.is_default && (
-                          <button
-                            onClick={() => setAsDefault(k.id)}
-                            title="Asosiy qilish"
-                            className="p-1.5 rounded-lg hover:bg-neutral-800 transition text-neutral-400 hover:text-white cursor-pointer"
-                          >
-                            <Check className="w-4 h-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDelete(k.id)}
-                          className="p-1.5 rounded-lg hover:bg-red-950/50 transition text-neutral-500 hover:text-red-400 cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                </>
+              ) : (
+                /* ADD NEW KEY FORM */
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
+                    <h3 className="text-sm font-semibold text-neutral-100">Yangi API Kalit qo‘shish</h3>
+                    <button
+                      onClick={() => setShowForm(false)}
+                      className="text-xs text-neutral-400 hover:text-white"
+                    >
+                      Orqaga qaytish
+                    </button>
+                  </div>
 
-                  <button
-                    onClick={() => {
-                      setShowForm(true);
-                      onProviderChange("groq");
-                    }}
-                    className="w-full mt-2 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-neutral-800 text-sm text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200 transition cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Yangi key qo‘shish
-                  </button>
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-300 mb-1.5 uppercase tracking-wide">
+                      1. AI Provayder
+                    </label>
+                    <select
+                      value={provider}
+                      onChange={(e) => onProviderChange(e.target.value as Provider)}
+                      className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 text-sm bg-neutral-950 text-neutral-100 focus:border-neutral-600 focus:outline-none cursor-pointer"
+                    >
+                      {PROVIDERS.map((p) => (
+                        <option key={p.value} value={p.value} className="bg-neutral-900 text-neutral-100">
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wide">
+                        2. API Key *
+                      </label>
+                      <span className="text-[11px] text-neutral-500 font-mono">
+                        Format: {currentProvider.placeholder}
+                      </span>
+                    </div>
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => {
+                        setApiKey(e.target.value);
+                        setError("");
+                      }}
+                      placeholder={currentProvider.placeholder}
+                      className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm font-mono focus:border-neutral-600 focus:outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-300 mb-1.5 uppercase tracking-wide">
+                      3. Model tanlash (Dropdown) *
+                    </label>
+                    {currentProvider.models.length > 0 ? (
+                      <div className="space-y-2">
+                        <select
+                          value={isCustomModel ? "__custom__" : model}
+                          onChange={(e) => {
+                            if (e.target.value === "__custom__") {
+                              setIsCustomModel(true);
+                              setCustomModelName("");
+                            } else {
+                              setIsCustomModel(false);
+                              setModel(e.target.value);
+                            }
+                          }}
+                          className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 text-sm focus:border-neutral-600 focus:outline-none cursor-pointer"
+                        >
+                          {currentProvider.models.map((m) => (
+                            <option key={m.id} value={m.id} className="bg-neutral-900 text-neutral-100">
+                              {m.name}
+                            </option>
+                          ))}
+                          <option value="__custom__" className="bg-neutral-900 text-neutral-100">
+                            + Boshqa model (Nomini qo‘lda yozish)...
+                          </option>
+                        </select>
+
+                        {isCustomModel && (
+                          <input
+                            value={customModelName}
+                            onChange={(e) => setCustomModelName(e.target.value)}
+                            placeholder="Aniq model nomini kiriting (masalan: gpt-4o)"
+                            className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <input
+                        value={model}
+                        onChange={(e) => setModel(e.target.value)}
+                        placeholder="Model nomini kiriting (masalan: gpt-4o)"
+                        className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-300 mb-1.5 uppercase tracking-wide">
+                      4. Kalit nomi (Ixtiyoriy)
+                    </label>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={`Masalan: Mening ${currentProvider.label.split(" ")[0]} kalitim`}
+                      className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                    />
+                  </div>
+
+                  {(provider === "custom" || provider === "openrouter") && (
+                    <div>
+                      <label className="block text-xs font-semibold text-neutral-300 mb-1.5 uppercase tracking-wide">
+                        Base URL (API Endpoint)
+                      </label>
+                      <input
+                        value={baseUrl}
+                        onChange={(e) => setBaseUrl(e.target.value)}
+                        placeholder="https://api.example.com/v1"
+                        className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-xs font-mono focus:border-neutral-600 focus:outline-none"
+                      />
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer pt-1">
+                    <input
+                      type="checkbox"
+                      checked={isDefault}
+                      onChange={(e) => setIsDefault(e.target.checked)}
+                      className="w-4 h-4 rounded border-neutral-700 bg-neutral-950 text-white cursor-pointer"
+                    />
+                    Ushbu kalitni asosiy (Default) qilib belgilash
+                  </label>
+
+                  {statusMessage && (
+                    <div className="flex items-center gap-2 text-xs text-blue-400 bg-blue-950/40 border border-blue-900/50 px-3.5 py-2.5 rounded-lg">
+                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                      <span>{statusMessage}</span>
+                    </div>
+                  )}
+
+                  {error && (
+                    <div className="flex items-start gap-2 text-xs text-red-400 bg-red-950/60 border border-red-900/60 px-3.5 py-2.5 rounded-lg">
+                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{error}</span>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={() => {
+                        setShowForm(false);
+                        setError("");
+                      }}
+                      disabled={saving}
+                      className="flex-1 h-11 rounded-xl border border-neutral-800 text-xs font-medium text-neutral-300 hover:bg-neutral-800 transition cursor-pointer"
+                    >
+                      Bekor qilish
+                    </button>
+                    <button
+                      onClick={handleSaveKey}
+                      disabled={saving}
+                      className="flex-1 h-11 rounded-xl bg-white text-neutral-950 text-xs font-semibold hover:bg-neutral-200 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Tekshirilmoqda...
+                        </>
+                      ) : (
+                        "Kalitni tekshirib saqlash"
+                      )}
+                    </button>
+                  </div>
                 </div>
               )}
-            </>
-          ) : (
-            <div className="space-y-4">
-              {/* Provider Selection */}
+            </div>
+          )}
+
+          {/* TAB 2: MODEL & ROLE */}
+          {activeTab === "model" && (
+            <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
-                  AI Provayder
+                <label className="block text-xs font-semibold text-neutral-300 uppercase tracking-wide mb-1.5">
+                  AI Yordamchi Roli (System Prompt Presets)
                 </label>
                 <select
-                  value={provider}
-                  onChange={(e) => onProviderChange(e.target.value as Provider)}
-                  className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 text-sm bg-neutral-950 text-neutral-100 focus:border-neutral-600 focus:outline-none cursor-pointer"
+                  value={appSettings.systemPromptPreset}
+                  onChange={(e) => {
+                    const presetId = e.target.value;
+                    const found = SYSTEM_PROMPT_PRESETS.find((p) => p.id === presetId);
+                    updateAppSettings({
+                      systemPromptPreset: presetId,
+                      systemPrompt: found ? found.prompt : appSettings.systemPrompt,
+                    });
+                  }}
+                  className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none cursor-pointer"
                 >
-                  {PROVIDERS.map((p) => (
-                    <option key={p.value} value={p.value} className="bg-neutral-900 text-neutral-100">
-                      {p.label}
+                  {SYSTEM_PROMPT_PRESETS.map((p) => (
+                    <option key={p.id} value={p.id} className="bg-neutral-900 text-neutral-100">
+                      {p.name}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* API Key Input with exact placeholder */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-sm font-medium text-neutral-300">
-                    API Key *
-                  </label>
-                  <span className="text-[11px] text-neutral-500 font-mono">
-                    Format: {currentProvider.placeholder}
+                <label className="block text-xs font-semibold text-neutral-300 uppercase tracking-wide mb-1.5">
+                  Tizimli ko‘rsatma (System Instruction)
+                </label>
+                <textarea
+                  rows={4}
+                  value={appSettings.systemPrompt}
+                  onChange={(e) =>
+                    updateAppSettings({
+                      systemPrompt: e.target.value,
+                      systemPromptPreset: "custom",
+                    })
+                  }
+                  placeholder="AI modelga xulq-atvori va formati bo‘yicha ko‘rsatma yozing..."
+                  className="w-full p-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 text-xs placeholder:text-neutral-500 focus:border-neutral-600 focus:outline-none leading-relaxed"
+                />
+              </div>
+
+              {/* Temperature Slider */}
+              <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-950/60">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-neutral-300 uppercase tracking-wide">
+                    Kreativlik darajasi (Temperature): {appSettings.temperature}
+                  </span>
+                  <span className="text-[11px] text-neutral-400">
+                    {appSettings.temperature < 0.3
+                      ? "Juda aniq & Faktik"
+                      : appSettings.temperature <= 0.8
+                      ? "Balansli (Tavsiya)"
+                      : "Ijodiy & Noan'anaviy"}
                   </span>
                 </div>
                 <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => {
-                    setApiKey(e.target.value);
-                    setError("");
-                  }}
-                  placeholder={currentProvider.placeholder}
-                  className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm font-mono focus:border-neutral-600 focus:outline-none transition"
+                  type="range"
+                  min="0.0"
+                  max="1.5"
+                  step="0.05"
+                  value={appSettings.temperature}
+                  onChange={(e) => updateAppSettings({ temperature: parseFloat(e.target.value) })}
+                  className="w-full accent-white cursor-pointer"
                 />
               </div>
 
-              {/* Model Dropdown + Custom option */}
-              <div>
-                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
-                  Model *
+              {/* Max Tokens */}
+              <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-950/60">
+                <label className="block text-xs font-semibold text-neutral-300 uppercase tracking-wide mb-2">
+                  Maksimal javob uzunligi (Max Tokens)
                 </label>
-                {currentProvider.models.length > 0 ? (
-                  <div className="space-y-2">
-                    <select
-                      value={isCustomModel ? "__custom__" : model}
-                      onChange={(e) => {
-                        if (e.target.value === "__custom__") {
-                          setIsCustomModel(true);
-                          setCustomModelName("");
-                        } else {
-                          setIsCustomModel(false);
-                          setModel(e.target.value);
-                        }
-                      }}
-                      className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 text-sm focus:border-neutral-600 focus:outline-none cursor-pointer"
+                <div className="grid grid-cols-4 gap-2">
+                  {[1024, 2048, 4096, 8192].map((tokens) => (
+                    <button
+                      key={tokens}
+                      onClick={() => updateAppSettings({ maxTokens: tokens })}
+                      className={`py-2 rounded-lg text-xs font-semibold transition cursor-pointer border ${
+                        appSettings.maxTokens === tokens
+                          ? "bg-white text-neutral-950 border-white"
+                          : "border-neutral-800 bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
+                      }`}
                     >
-                      {currentProvider.models.map((m) => (
-                        <option key={m.id} value={m.id} className="bg-neutral-900 text-neutral-100">
-                          {m.name}
-                        </option>
-                      ))}
-                      <option value="__custom__" className="bg-neutral-900 text-neutral-100">
-                        + Boshqa model (Nomini qo‘lda kiritish)...
-                      </option>
-                    </select>
-
-                    {isCustomModel && (
-                      <input
-                        value={customModelName}
-                        onChange={(e) => setCustomModelName(e.target.value)}
-                        placeholder="Model aniq identifikatorini kiriting (masalan: gpt-4o)"
-                        className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
-                      />
-                    )}
-                  </div>
-                ) : (
-                  <input
-                    value={model}
-                    onChange={(e) => setModel(e.target.value)}
-                    placeholder="Model nomini kiriting (masalan: gpt-4o)"
-                    className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
-                  />
-                )}
+                      {tokens} tok
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Optional Name */}
-              <div>
-                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
-                  Kalit nomi (Ixtiyoriy)
-                </label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder={`Masalan: Mening ${currentProvider.label.split(" ")[0]} kalitim`}
-                  className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
-                />
-              </div>
-
-              {/* Base URL (for custom or openrouter) */}
-              {(provider === "custom" || provider === "openrouter") && (
+              {/* Stream toggle */}
+              <div className="flex items-center justify-between p-4 rounded-xl border border-neutral-800 bg-neutral-950/60">
                 <div>
-                  <label className="block text-sm font-medium text-neutral-300 mb-1.5">
-                    Base URL (API Endpoint)
-                  </label>
-                  <input
-                    value={baseUrl}
-                    onChange={(e) => setBaseUrl(e.target.value)}
-                    placeholder="https://api.example.com/v1"
-                    className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none font-mono text-xs"
+                  <p className="text-xs font-semibold text-neutral-200">Jonli oqimda yozish (Streaming)</p>
+                  <p className="text-[11px] text-neutral-500">Javob paydo bo‘lishini so‘zma-so‘z ko‘rsatish</p>
+                </div>
+                <button
+                  onClick={() => updateAppSettings({ stream: !appSettings.stream })}
+                  className={`w-12 h-6 rounded-full transition cursor-pointer p-0.5 ${
+                    appSettings.stream ? "bg-white" : "bg-neutral-800"
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-neutral-950 transition transform ${
+                      appSettings.stream ? "translate-x-6" : "translate-x-0"
+                    }`}
                   />
-                </div>
-              )}
-
-              {/* Is Default Checkbox */}
-              <label className="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer pt-1">
-                <input
-                  type="checkbox"
-                  checked={isDefault}
-                  onChange={(e) => setIsDefault(e.target.checked)}
-                  className="w-4 h-4 rounded border-neutral-700 bg-neutral-950 text-white focus:ring-0 cursor-pointer"
-                />
-                Asosiy (Default) kalit sifatida belgilash
-              </label>
-
-              {/* Validation Status / Error */}
-              {statusMessage && (
-                <div className="flex items-center gap-2 text-sm text-blue-400 bg-blue-950/40 border border-blue-900/50 px-3.5 py-2.5 rounded-lg">
-                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                  <span>{statusMessage}</span>
-                </div>
-              )}
-
-              {error && (
-                <div className="flex items-start gap-2 text-sm text-red-400 bg-red-950/60 border border-red-900/60 px-3.5 py-2.5 rounded-lg">
-                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>{error}</span>
-                </div>
-              )}
-
-              {/* Action Buttons */}
-              <div className="flex gap-2 pt-2">
-                <button
-                  onClick={() => {
-                    setShowForm(false);
-                    setError("");
-                    setStatusMessage("");
-                  }}
-                  disabled={saving}
-                  className="flex-1 h-11 rounded-lg border border-neutral-800 text-sm font-medium text-neutral-300 hover:bg-neutral-800 transition cursor-pointer disabled:opacity-50"
-                >
-                  Bekor qilish
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: APPEARANCE */}
+          {activeTab === "appearance" && (
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-semibold text-neutral-300 uppercase tracking-wide mb-2">
+                  Qora mavzu soyasi (Dark Theme Shade)
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {[
+                    { id: "oled", name: "OLED Pitch Black", hex: "#0a0a0a" },
+                    { id: "midnight", name: "Midnight Navy", hex: "#0f172a" },
+                    { id: "carbon", name: "Carbon Slate", hex: "#18181b" },
+                  ].map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => updateAppSettings({ themeStyle: t.id as any })}
+                      className={`p-3 rounded-xl border text-left transition cursor-pointer flex flex-col justify-between h-20 ${
+                        appSettings.themeStyle === t.id
+                          ? "border-white bg-neutral-800/80 shadow-md"
+                          : "border-neutral-800 bg-neutral-950 hover:border-neutral-700"
+                      }`}
+                    >
+                      <div className="w-5 h-5 rounded-full border border-neutral-700" style={{ background: t.hex }} />
+                      <span className="text-xs font-medium text-neutral-200">{t.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-300 uppercase tracking-wide mb-2">
+                  Chatdagi shrift o‘lchami (Font Size)
+                </label>
+                <div className="grid grid-cols-3 gap-2.5">
+                  {[
+                    { id: "sm", label: "Kichik (14px)" },
+                    { id: "base", label: "Standart (15px)" },
+                    { id: "lg", label: "Katta (16px)" },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => updateAppSettings({ fontSize: f.id as any })}
+                      className={`py-2.5 rounded-xl border text-xs font-medium transition cursor-pointer ${
+                        appSettings.fontSize === f.id
+                          ? "bg-white text-neutral-950 border-white"
+                          : "border-neutral-800 bg-neutral-950 text-neutral-300 hover:bg-neutral-800"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-xl border border-neutral-800 bg-neutral-950/60">
+                <div>
+                  <p className="text-xs font-semibold text-neutral-200">Enter klavishi bilan xabar yuborish</p>
+                  <p className="text-[11px] text-neutral-500">
+                    {appSettings.sendOnEnter
+                      ? "Enter = yuborish, Shift+Enter = yangi qator"
+                      : "Ctrl+Enter = yuborish, Enter = yangi qator"}
+                  </p>
+                </div>
                 <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="flex-1 h-11 rounded-lg bg-white text-neutral-950 text-sm font-medium hover:bg-neutral-200 transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+                  onClick={() => updateAppSettings({ sendOnEnter: !appSettings.sendOnEnter })}
+                  className={`w-12 h-6 rounded-full transition cursor-pointer p-0.5 ${
+                    appSettings.sendOnEnter ? "bg-white" : "bg-neutral-800"
+                  }`}
                 >
-                  {saving ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Tekshirilmoqda...
-                    </>
-                  ) : (
-                    "Saqlash"
-                  )}
+                  <div
+                    className={`w-5 h-5 rounded-full bg-neutral-950 transition transform ${
+                      appSettings.sendOnEnter ? "translate-x-6" : "translate-x-0"
+                    }`}
+                  />
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: ACCOUNT */}
+          {activeTab === "account" && (
+            <div className="space-y-5">
+              <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-950/60 flex items-center gap-3">
+                <div className="w-11 h-11 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-sm font-bold text-white uppercase">
+                  {(user?.user_metadata?.full_name || user?.email || "U").charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-neutral-100 truncate">
+                    {user?.user_metadata?.full_name || "Foydalanuvchi"}
+                  </p>
+                  <p className="text-xs text-neutral-400 font-mono">
+                    @{user?.user_metadata?.username || user?.email?.split("@")[0]}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-300 uppercase tracking-wide mb-1.5">
+                  Ismingizni o‘zgartirish
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    placeholder="Yangi ismingiz"
+                    className="flex-1 h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                  />
+                  <button
+                    onClick={handleUpdateName}
+                    className="px-4 h-11 rounded-xl bg-white text-neutral-950 text-xs font-semibold hover:bg-neutral-200 transition cursor-pointer"
+                  >
+                    {nameSaved ? "Saqlandi!" : "Yangilash"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-neutral-800">
+                <label className="block text-xs font-semibold text-neutral-300 uppercase tracking-wide mb-2">
+                  Parolni o‘zgartirish
+                </label>
+                <div className="space-y-2">
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Yangi parol (kamida 6 ta belgi)"
+                    className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                  />
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder="Yangi parolni takrorlang"
+                    className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                  />
+                  {passError && <p className="text-xs text-red-400">{passError}</p>}
+                  {passMessage && <p className="text-xs text-emerald-400">{passMessage}</p>}
+                  <button
+                    onClick={handleChangePassword}
+                    className="w-full h-10 rounded-xl border border-neutral-800 text-neutral-200 text-xs font-medium hover:bg-neutral-800 transition cursor-pointer"
+                  >
+                    Parolni saqlash
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-neutral-800">
+                <button
+                  onClick={signOut}
+                  className="w-full h-11 rounded-xl border border-red-900/60 bg-red-950/30 text-red-400 text-xs font-semibold hover:bg-red-900/40 transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  Hisobdan chiqish (Log Out)
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: DATA */}
+          {activeTab === "data" && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-950/60">
+                  <p className="text-xs text-neutral-400 font-medium">Jami suhbatlar</p>
+                  <p className="text-2xl font-bold text-neutral-100 mt-1">{totalChats}</p>
+                </div>
+                <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-950/60">
+                  <p className="text-xs text-neutral-400 font-medium">Jami xabarlar</p>
+                  <p className="text-2xl font-bold text-neutral-100 mt-1">{totalMessages}</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-neutral-300 uppercase tracking-wide mb-1.5">
+                  Suhbatlar arxivini yuklab olish
+                </label>
+                <button
+                  onClick={handleExportChats}
+                  className="w-full h-11 rounded-xl border border-neutral-800 bg-neutral-950 hover:bg-neutral-800 text-neutral-200 text-xs font-medium transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Barcha suhbatlarni JSON formatida yuklab olish
+                </button>
+              </div>
+
+              <div className="pt-4 border-t border-neutral-800">
+                <label className="block text-xs font-semibold text-red-400 uppercase tracking-wide mb-1.5">
+                  Xavfli soha (Danger Zone)
+                </label>
+                <button
+                  onClick={handleClearAllChats}
+                  className="w-full h-11 rounded-xl border border-red-900/80 bg-red-950/40 hover:bg-red-900/50 text-red-300 text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Barcha suhbatlar tarixini tozalash
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: ABOUT */}
+          {activeTab === "about" && (
+            <div className="space-y-4">
+              <div className="p-5 rounded-2xl border border-neutral-800 bg-neutral-950/80 text-center">
+                <div className="w-12 h-12 rounded-2xl bg-neutral-900 border border-neutral-800 mx-auto flex items-center justify-center mb-3">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-base font-bold text-neutral-100">MR AI Professional</h3>
+                <p className="text-xs text-neutral-400 mt-1">Versiya 2.5 Pro (Modern AI Studio)</p>
+                <div className="mt-4 pt-4 border-t border-neutral-800/80 text-xs text-neutral-400 space-y-1">
+                  <p>Asoschi & Ishlab chiquvchi: <span className="text-white font-medium">Muhammadrasul Qosimov</span></p>
+                  <p>Arxitektura: Next.js 16 + React 19 + Supabase + Tailwind CSS v4</p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-950/50 space-y-2 text-xs text-neutral-400 leading-relaxed">
+                <p className="font-semibold text-neutral-200">🔒 Xavfsizlik & Maxfiylik Kafolati:</p>
+                <p>
+                  Siz kiritgan har bir API kalit faqat sizning shaxsiy ma'lumotlar bazangizda shifrlangan saqlanadi. MR AI uchinchi tomonlarga hech qanday ma'lumot yubormaydi.
+                </p>
               </div>
             </div>
           )}

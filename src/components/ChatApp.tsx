@@ -11,12 +11,14 @@ import {
   Square,
   Menu,
   X,
-  ChevronDown,
+  ShieldAlert,
+  Key,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import SettingsModal from "./SettingsModal";
 import type { Chat, Message, UserApiKey } from "@/types";
+import { loadSettings, AppSettings, DEFAULT_SETTINGS } from "@/lib/settings";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -31,15 +33,24 @@ export default function ChatApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [defaultKey, setDefaultKey] = useState<UserApiKey | null>(null);
   const [mobileSidebar, setMobileSidebar] = useState(false);
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load chats + default key
+  // Load chats + default key + settings
   useEffect(() => {
     if (!user) return;
     loadChats();
     loadDefaultKey();
+    setAppSettings(loadSettings());
+
+    function onSettingsUpdate() {
+      setAppSettings(loadSettings());
+    }
+    window.addEventListener("mr_ai_settings_updated", onSettingsUpdate);
+    return () => window.removeEventListener("mr_ai_settings_updated", onSettingsUpdate);
   }, [user]);
 
   // Load messages when chat changes
@@ -88,7 +99,7 @@ export default function ChatApp() {
 
   function createNewChat() {
     if (!user) return;
-    // Agar allaqachon yangi suhbatda bo'lsa yoki xabarlar bo'lmasa, ishlamasin
+    // Agar allaqachon yangi suhbatda bo'lsa yoki xabarlar bo'lmasa, hech narsa o'zgarmasin
     if (!currentChatId || messages.length === 0) {
       setMobileSidebar(false);
       return;
@@ -169,37 +180,62 @@ export default function ChatApp() {
       { role: "user" as const, content: userMsg },
     ];
 
-    const systemPrompt = `Siz MR AI — professional AI yordamchisiz. Javoblaringiz aniq, foydali va chiroyli formatlangan bo‘lsin. Matematik formulalar uchun LaTeX ($...$) ishlating. Suhbat qaysi tilda bo‘lsa, o‘sha tilda javob bering.`;
+    const currentSystemPrompt =
+      appSettings.systemPrompt ||
+      `Siz MR AI — professional AI yordamchisiz. Javoblaringiz aniq, foydali va chiroyli formatlangan bo‘lsin. Matematik formulalar uchun LaTeX ($...$) ishlating. Suhbat qaysi tilda bo‘lsa, o‘sha tilda javob bering.`;
 
     try {
       const baseUrl = defaultKey.base_url || getDefaultBaseUrl(defaultKey.provider);
+      const isStream = appSettings.stream !== false;
+
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${defaultKey.api_key}`,
           "Content-Type": "application/json",
+          ...(defaultKey.provider === "openrouter"
+            ? {
+                "HTTP-Referer": "https://mrai-uzbek.vercel.app",
+                "X-Title": "MR AI",
+              }
+            : {}),
         },
         body: JSON.stringify({
           model: defaultKey.model,
           messages: [
-            { role: "system", content: systemPrompt },
+            { role: "system", content: currentSystemPrompt },
             ...history,
           ],
-          stream: true,
-          temperature: 0.7,
+          stream: isStream,
+          temperature: appSettings.temperature ?? 0.7,
+          max_tokens: appSettings.maxTokens ?? 4096,
         }),
         signal: controller.signal,
       });
 
       if (!res.ok) {
         const err = await res.text();
-        throw new Error(err || `HTTP ${res.status}`);
+        let cleanError = `HTTP ${res.status}`;
+        try {
+          const parsed = JSON.parse(err);
+          cleanError = parsed.error?.message || parsed.message || cleanError;
+        } catch {
+          if (err && err.length < 200) cleanError = err;
+        }
+
+        if (res.status === 401 || cleanError.toLowerCase().includes("invalid api key")) {
+          throw new Error(
+            "API kalit xatosi: Kiritilgan kalit yaroqsiz yoki muddati tugagan (Invalid API Key). Iltimos, Sozlamalar (Settings) bo‘limidan to‘g‘ri kalit kiriting."
+          );
+        }
+        if (res.status === 429) {
+          throw new Error(
+            "Provayder so‘rovlar limiti yoki balans tugagan (429 Rate limit / Quota exceeded). Iltimos, biroz kuting yoki boshqa model/kalit tanlang."
+          );
+        }
+        throw new Error(cleanError);
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error("No stream");
-
-      const decoder = new TextDecoder();
       let fullContent = "";
       const tempAiId = crypto.randomUUID();
 
@@ -214,29 +250,40 @@ export default function ChatApp() {
         },
       ]);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      if (isStream && res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n").filter((l) => l.startsWith("data: "));
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        for (const line of lines) {
-          const data = line.replace("data: ", "").trim();
-          if (data === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(data);
-            const delta = parsed.choices?.[0]?.delta?.content || "";
-            if (delta) {
-              fullContent += delta;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === tempAiId ? { ...m, content: fullContent } : m
-                )
-              );
-            }
-          } catch {}
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n").filter((l) => l.startsWith("data: "));
+
+          for (const line of lines) {
+            const data = line.replace("data: ", "").trim();
+            if (data === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices?.[0]?.delta?.content || "";
+              if (delta) {
+                fullContent += delta;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === tempAiId ? { ...m, content: fullContent } : m
+                  )
+                );
+              }
+            } catch {}
+          }
         }
+      } else {
+        const json = await res.json();
+        fullContent = json.choices?.[0]?.message?.content || "";
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempAiId ? { ...m, content: fullContent } : m))
+        );
       }
 
       // Save assistant message
@@ -284,9 +331,16 @@ export default function ChatApp() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+    if (appSettings.sendOnEnter !== false) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    } else {
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        sendMessage();
+      }
     }
   }
 
@@ -307,8 +361,22 @@ export default function ChatApp() {
     user?.email?.split("@")[0] ||
     "user";
 
+  const themeBg =
+    appSettings.themeStyle === "midnight"
+      ? "bg-[#0b1329]"
+      : appSettings.themeStyle === "carbon"
+      ? "bg-[#141416]"
+      : "bg-neutral-950";
+
+  const fontSizeClass =
+    appSettings.fontSize === "sm"
+      ? "text-[14px]"
+      : appSettings.fontSize === "lg"
+      ? "text-[16px]"
+      : "text-[15px]";
+
   return (
-    <div className="h-screen flex bg-neutral-950 text-neutral-100 overflow-hidden">
+    <div className={`h-screen flex ${themeBg} text-neutral-100 overflow-hidden`}>
       {/* Sidebar */}
       <aside
         className={`${
@@ -318,8 +386,7 @@ export default function ChatApp() {
         <div className="p-3">
           <button
             onClick={createNewChat}
-            disabled={!currentChatId || messages.length === 0}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 text-sm font-medium hover:bg-neutral-800/80 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-neutral-950"
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 text-sm font-medium hover:bg-neutral-800/80 transition cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Yangi suhbat
@@ -359,7 +426,7 @@ export default function ChatApp() {
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-neutral-300 hover:bg-neutral-800 transition cursor-pointer"
           >
             <Settings className="w-4 h-4" />
-            Settings
+            Sozlamalar (Settings)
           </button>
           <div className="flex items-center gap-2.5 px-3 py-2">
             <div className="w-7 h-7 rounded-full bg-neutral-800 border border-neutral-700 text-white flex items-center justify-center text-xs font-semibold uppercase">
@@ -394,8 +461,7 @@ export default function ChatApp() {
             <div className="p-3">
               <button
                 onClick={createNewChat}
-                disabled={!currentChatId || messages.length === 0}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-sm font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-sm font-medium text-neutral-200 hover:bg-neutral-800 transition cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 Yangi suhbat
@@ -423,7 +489,7 @@ export default function ChatApp() {
       )}
 
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-neutral-950">
+      <div className={`flex-1 flex flex-col min-w-0 ${themeBg}`}>
         {/* Top bar */}
         <header className="h-14 border-b border-neutral-800 bg-neutral-950/80 backdrop-blur flex items-center justify-between px-4 shrink-0">
           <div className="flex items-center gap-3">
@@ -445,19 +511,35 @@ export default function ChatApp() {
             </div>
           </div>
 
-          {defaultKey ? (
-            <div className="flex items-center gap-1.5 text-xs text-neutral-300 bg-neutral-900 border border-neutral-800 px-2.5 py-1 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              {defaultKey.provider} · {defaultKey.model}
-            </div>
-          ) : (
+          <div className="flex items-center gap-2">
+            {defaultKey ? (
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="flex items-center gap-1.5 text-xs text-neutral-300 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-full hover:border-neutral-700 transition cursor-pointer"
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="font-medium">{defaultKey.provider}</span>
+                <span className="text-neutral-500">·</span>
+                <span className="text-neutral-400 truncate max-w-[160px]">{defaultKey.model}</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="text-xs text-amber-300 bg-amber-950/60 border border-amber-900/60 px-3 py-1.5 rounded-full hover:bg-amber-900/60 transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Key className="w-3.5 h-3.5" />
+                API Key qo‘shing
+              </button>
+            )}
+
             <button
               onClick={() => setSettingsOpen(true)}
-              className="text-xs text-amber-300 bg-amber-950/60 border border-amber-900/60 px-2.5 py-1 rounded-full hover:bg-amber-900/60 transition cursor-pointer"
+              title="Sozlamalar"
+              className="p-2 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-white transition cursor-pointer"
             >
-              API Key qo‘shing
+              <Settings className="w-4 h-4" />
             </button>
-          )}
+          </div>
         </header>
 
         {/* Messages */}
@@ -471,7 +553,7 @@ export default function ChatApp() {
                 MR AI bilan suhbat
               </h2>
               <p className="text-sm text-neutral-400 max-w-sm text-center">
-                Savolingizni yozing. Istagan model va API key bilan ishlay olasiz.
+                Savolingizni yozing. Istagan AI provayder va model bilan professional suhbatlashing.
               </p>
             </div>
           ) : (
@@ -487,18 +569,36 @@ export default function ChatApp() {
                     </div>
                   )}
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${fontSizeClass} leading-relaxed ${
                       msg.role === "user"
                         ? "bg-neutral-800 border border-neutral-700/60 text-white"
                         : "bg-transparent text-neutral-200"
                     }`}
                   >
                     {msg.role === "assistant" ? (
-                      <div className="prose prose-invert prose-sm max-w-none prose-p:my-2 prose-pre:bg-neutral-900 prose-pre:border prose-pre:border-neutral-800 prose-pre:text-neutral-100">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content || "▋"}
-                        </ReactMarkdown>
-                      </div>
+                      msg.content.startsWith("Xatolik:") || msg.content.includes("API kalit xatosi") ? (
+                        <div className="p-3.5 rounded-xl border border-red-900/60 bg-red-950/40 text-red-300 text-sm space-y-2.5">
+                          <div className="flex items-start gap-2">
+                            <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                            <span className="leading-relaxed font-medium">
+                              {msg.content.replace(/^Xatolik:\s*/, "")}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setSettingsOpen(true)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-900/60 hover:bg-red-800 text-white text-xs font-semibold transition cursor-pointer"
+                          >
+                            <Key className="w-3.5 h-3.5" />
+                            Sozlamalar (API Keyni almashtirish)
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="prose prose-invert prose-sm max-w-none prose-p:my-2 prose-pre:bg-neutral-900 prose-pre:border prose-pre:border-neutral-800 prose-pre:text-neutral-100">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content || "▋"}
+                          </ReactMarkdown>
+                        </div>
+                      )
                     ) : (
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                     )}
@@ -524,7 +624,7 @@ export default function ChatApp() {
                 onKeyDown={handleKeyDown}
                 placeholder="Xabar yozing..."
                 rows={1}
-                className="flex-1 resize-none bg-transparent px-4 py-3 text-[15px] text-neutral-100 placeholder:text-neutral-500 max-h-[200px] focus:outline-none"
+                className={`flex-1 resize-none bg-transparent px-4 py-3 ${fontSizeClass} text-neutral-100 placeholder:text-neutral-500 max-h-[200px] focus:outline-none`}
                 disabled={isStreaming}
               />
               <div className="pr-2 pb-2">
