@@ -86,17 +86,14 @@ export default function ChatApp() {
     setMessages(data || []);
   }
 
-  async function createNewChat() {
+  function createNewChat() {
     if (!user) return;
-    const supabase = await getSupabaseBrowserClient();
-    const { data, error } = await supabase
-      .from("chats")
-      .insert({ user_id: user.id, title: "Yangi suhbat" })
-      .select()
-      .single();
-    if (error) return;
-    setChats((prev) => [data, ...prev]);
-    setCurrentChatId(data.id);
+    // Agar allaqachon yangi suhbatda bo'lsa yoki xabarlar bo'lmasa, ishlamasin
+    if (!currentChatId || messages.length === 0) {
+      setMobileSidebar(false);
+      return;
+    }
+    setCurrentChatId(null);
     setMessages([]);
     setMobileSidebar(false);
   }
@@ -321,7 +318,8 @@ export default function ChatApp() {
         <div className="p-3">
           <button
             onClick={createNewChat}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 text-sm font-medium hover:bg-neutral-800/80 transition cursor-pointer"
+            disabled={!currentChatId || messages.length === 0}
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 text-sm font-medium hover:bg-neutral-800/80 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-neutral-950"
           >
             <Plus className="w-4 h-4" />
             Yangi suhbat
@@ -396,7 +394,8 @@ export default function ChatApp() {
             <div className="p-3">
               <button
                 onClick={createNewChat}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-sm font-medium text-neutral-200 hover:bg-neutral-800"
+                disabled={!currentChatId || messages.length === 0}
+                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-sm font-medium text-neutral-200 hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Plus className="w-4 h-4" />
                 Yangi suhbat
