@@ -300,7 +300,15 @@ export default function ChatApp() {
     el.style.height = Math.min(el.scrollHeight, 200) + "px";
   }
 
-  const displayName = user?.email?.split("@")[0] || "User";
+  const displayName =
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.username ||
+    user?.email?.split("@")[0] ||
+    "User";
+  const displayUsername =
+    user?.user_metadata?.username ||
+    user?.email?.split("@")[0] ||
+    "user";
 
   return (
     <div className="h-screen flex bg-neutral-950 text-neutral-100 overflow-hidden">
@@ -361,7 +369,7 @@ export default function ChatApp() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate text-neutral-200">{displayName}</p>
-              <p className="text-[11px] text-neutral-500 truncate">{user?.email}</p>
+              <p className="text-[11px] text-neutral-500 truncate">@{displayUsername}</p>
             </div>
             <button
               onClick={signOut}

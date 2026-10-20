@@ -4,12 +4,19 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { User, Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 
+export function formatUsernameToEmail(username: string): string {
+  const trimmed = username.trim().toLowerCase();
+  if (trimmed.includes("@")) return trimmed;
+  const clean = trimmed.replace(/[^a-z0-9_.-]/g, "");
+  return `${clean}@mrai.local`;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string) => Promise<{ data?: any; error: string | null }>;
+  signIn: (username: string, password: string) => Promise<{ data?: any; error: string | null }>;
+  signUp: (name: string, username: string, password: string) => Promise<{ data?: any; error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -59,16 +66,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (username: string, password: string) => {
     const supabase = await getSupabaseBrowserClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error?.message ?? null };
+    const email = formatUsernameToEmail(username);
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    return { data, error: error?.message ?? null };
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (name: string, username: string, password: string) => {
     const supabase = await getSupabaseBrowserClient();
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    return { data, error: error?.message ?? null };
+    const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+    const email = formatUsernameToEmail(cleanUsername);
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: name.trim(),
+          username: cleanUsername,
+        },
+      },
+    });
+
+    if (error) {
+      return { error: error.message };
+    }
+
+    if (data?.session) {
+      setSession(data.session);
+      setUser(data.user);
+      return { data, error: null };
+    }
+
+    // Attempt automatic login immediately if session wasn't returned
+    const signInRes = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInRes.data?.session) {
+      setSession(signInRes.data.session);
+      setUser(signInRes.data.user);
+      return { data: signInRes.data, error: null };
+    }
+
+    return { data, error: null };
   };
 
   const signOut = async () => {
