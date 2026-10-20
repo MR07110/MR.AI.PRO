@@ -110,6 +110,17 @@ function ThinkingBlock({ thinking, isThinking }: { thinking: string; isThinking?
 
 // Split thinking tags from assistant output
 function parseThinkingAndContent(raw: string) {
+  if (raw.startsWith("<think>")) {
+    const thinkMatch = raw.match(/<think>([\s\S]*?)(?:<\/think>|$)/);
+    if (thinkMatch) {
+      const thinking = thinkMatch[1].trim();
+      const content = raw.replace(/<think>[\s\S]*?(?:<\/think>|$)/, "").trim();
+      return { thinking, content };
+    }
+  }
+  if (raw.startsWith("<") && "<think>".startsWith(raw)) {
+    return { thinking: "", content: "" };
+  }
   const thinkMatch = raw.match(/<think>([\s\S]*?)(?:<\/think>|$)/);
   if (thinkMatch) {
     const thinking = thinkMatch[1].trim();
@@ -143,6 +154,10 @@ export default function ChatApp() {
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const skipNextLoadRef = useRef<string | null>(null);
+  const targetTextRef = useRef("");
+  const displayedTextRef = useRef("");
+  const smoothTickerRef = useRef<number | null>(null);
+  const isStreamingActiveRef = useRef(false);
 
   // Load chats + default key + settings
   useEffect(() => {
@@ -187,12 +202,19 @@ export default function ChatApp() {
     setIsScrolledUp(!isNearBottom);
   };
 
-  // Auto scroll only when near bottom
+  // Auto scroll only when near bottom (ultra-smooth during streaming)
   useEffect(() => {
     if (!isScrolledUp) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const el = chatScrollContainerRef.current;
+      if (el) {
+        if (isStreaming) {
+          el.scrollTop = el.scrollHeight;
+        } else {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+      }
     }
-  }, [messages, isScrolledUp]);
+  }, [messages, isScrolledUp, isStreaming]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -256,6 +278,9 @@ export default function ChatApp() {
     if (!currentChatId || messages.length === 0) {
       setMobileSidebar(false);
       return;
+    }
+    if (isStreaming) {
+      stopStreaming();
     }
     setCurrentChatId(null);
     setMessages([]);
@@ -327,6 +352,18 @@ export default function ChatApp() {
     abortRef.current = controller;
 
     const tempAiId = crypto.randomUUID();
+    targetTextRef.current = "";
+    displayedTextRef.current = "";
+    isStreamingActiveRef.current = true;
+    let networkDone = false;
+    let lastTickTime = 0;
+    const FRAME_MS = 18; // ~55 updates per second: perfectly calm, steady, readable
+
+    if (smoothTickerRef.current) {
+      cancelAnimationFrame(smoothTickerRef.current);
+      smoothTickerRef.current = null;
+    }
+
     setMessages((prev) => [
       ...prev,
       {
@@ -338,8 +375,62 @@ export default function ChatApp() {
       },
     ]);
 
+    // Ultra-smooth typewriter ticker loop: reveals characters smoothly without jerky bursts
+    const tickSmoothStream = (time: number) => {
+      if (!isStreamingActiveRef.current) return;
+
+      if (time - lastTickTime >= FRAME_MS) {
+        lastTickTime = time;
+
+        const target = targetTextRef.current;
+        const current = displayedTextRef.current;
+
+        if (current.length < target.length) {
+          const diff = target.length - current.length;
+          let step = 1;
+          if (diff < 20) step = 1;
+          else if (diff < 50) step = 2;
+          else if (diff < 120) step = 3;
+          else if (diff < 250) step = 4;
+          else if (diff < 500) step = 6;
+          else step = Math.ceil(diff / 25);
+
+          const nextLen = Math.min(target.length, current.length + step);
+          const nextText = target.slice(0, nextLen);
+          displayedTextRef.current = nextText;
+
+          setMessages((prev) => {
+            const exists = prev.some((m) => m.id === tempAiId);
+            if (exists) {
+              return prev.map((m) =>
+                m.id === tempAiId ? { ...m, content: nextText } : m
+              );
+            }
+            return [
+              ...prev,
+              {
+                id: tempAiId,
+                chat_id: chatId,
+                role: "assistant",
+                content: nextText,
+                created_at: new Date().toISOString(),
+              },
+            ];
+          });
+        }
+
+        if (networkDone && displayedTextRef.current.length >= targetTextRef.current.length) {
+          smoothTickerRef.current = null;
+          return;
+        }
+      }
+
+      smoothTickerRef.current = requestAnimationFrame(tickSmoothStream);
+    };
+
+    smoothTickerRef.current = requestAnimationFrame(tickSmoothStream);
+
     const isStream = appSettings.stream !== false;
-    let fullContent = "";
 
     try {
       const res = await fetch("/api/chat", {
@@ -394,59 +485,43 @@ export default function ChatApp() {
             try {
               const parsed = JSON.parse(dataStr);
               if (parsed.content !== undefined && parsed.content !== null) {
-                fullContent += parsed.content;
-                setMessages((prev) => {
-                  const exists = prev.some((m) => m.id === tempAiId);
-                  if (exists) {
-                    return prev.map((m) =>
-                      m.id === tempAiId ? { ...m, content: fullContent } : m
-                    );
-                  }
-                  return [
-                    ...prev,
-                    {
-                      id: tempAiId,
-                      chat_id: chatId,
-                      role: "assistant",
-                      content: fullContent,
-                      created_at: new Date().toISOString(),
-                    },
-                  ];
-                });
+                targetTextRef.current += parsed.content;
               }
             } catch {}
           }
         }
       } else {
         const data = await res.json();
-        fullContent = data.content || "";
-        setMessages((prev) => {
-          const exists = prev.some((m) => m.id === tempAiId);
-          if (exists) {
-            return prev.map((m) =>
-              m.id === tempAiId ? { ...m, content: fullContent } : m
-            );
-          }
-          return [
-            ...prev,
-            {
-              id: tempAiId,
-              chat_id: chatId,
-              role: "assistant",
-              content: fullContent,
-              created_at: new Date().toISOString(),
-            },
-          ];
-        });
+        targetTextRef.current = data.content || "";
       }
 
+      networkDone = true;
+
+      // Smoothly wait until displayed text finishes typing out all remaining characters
+      while (isStreamingActiveRef.current && displayedTextRef.current.length < targetTextRef.current.length) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      isStreamingActiveRef.current = false;
+      if (smoothTickerRef.current) {
+        cancelAnimationFrame(smoothTickerRef.current);
+        smoothTickerRef.current = null;
+      }
+
+      const fullFinalContent = targetTextRef.current;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempAiId ? { ...m, content: fullFinalContent } : m
+        )
+      );
+
       // Save assistant message to Supabase
-      if (fullContent.trim()) {
+      if (fullFinalContent.trim()) {
         const supabase = await getSupabaseBrowserClient();
         await supabase.from("messages").insert({
           chat_id: chatId,
           role: "assistant",
-          content: fullContent,
+          content: fullFinalContent,
         });
 
         // Update chat timestamp
@@ -456,14 +531,21 @@ export default function ChatApp() {
           .eq("id", chatId);
       }
     } catch (err: any) {
+      isStreamingActiveRef.current = false;
+      if (smoothTickerRef.current) {
+        cancelAnimationFrame(smoothTickerRef.current);
+        smoothTickerRef.current = null;
+      }
+
       if (err.name === "AbortError") {
-        if (fullContent.trim()) {
+        const partial = displayedTextRef.current || targetTextRef.current;
+        if (partial.trim()) {
           try {
             const supabase = await getSupabaseBrowserClient();
             await supabase.from("messages").insert({
               chat_id: chatId,
               role: "assistant",
-              content: fullContent,
+              content: partial,
             });
           } catch {}
         }
@@ -489,6 +571,11 @@ export default function ChatApp() {
         });
       }
     } finally {
+      isStreamingActiveRef.current = false;
+      if (smoothTickerRef.current) {
+        cancelAnimationFrame(smoothTickerRef.current);
+        smoothTickerRef.current = null;
+      }
       setIsStreaming(false);
       abortRef.current = null;
     }
@@ -607,8 +694,37 @@ export default function ChatApp() {
   }
 
   function stopStreaming() {
+    isStreamingActiveRef.current = false;
     abortRef.current?.abort();
+    if (smoothTickerRef.current) {
+      cancelAnimationFrame(smoothTickerRef.current);
+      smoothTickerRef.current = null;
+    }
+    const finalContent = targetTextRef.current || displayedTextRef.current;
+    if (finalContent) {
+      setMessages((prev) => {
+        const lastAssistant = [...prev].reverse().find((m) => m.role === "assistant");
+        if (lastAssistant) {
+          return prev.map((m) =>
+            m.id === lastAssistant.id ? { ...m, content: finalContent } : m
+          );
+        }
+        return prev;
+      });
+    }
     setIsStreaming(false);
+  }
+
+  function selectChat(id: string) {
+    if (id === currentChatId) {
+      setMobileSidebar(false);
+      return;
+    }
+    if (isStreaming) {
+      stopStreaming();
+    }
+    setCurrentChatId(id);
+    setMobileSidebar(false);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -789,7 +905,7 @@ export default function ChatApp() {
           {chats.map((chat) => (
             <div
               key={chat.id}
-              onClick={() => setCurrentChatId(chat.id)}
+              onClick={() => selectChat(chat.id)}
               className={`w-full group flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-left transition cursor-pointer ${
                 currentChatId === chat.id
                   ? "bg-neutral-800/90 text-white font-medium border border-neutral-700/60"
@@ -908,10 +1024,7 @@ export default function ChatApp() {
               {chats.map((chat) => (
                 <div
                   key={chat.id}
-                  onClick={() => {
-                    setCurrentChatId(chat.id);
-                    setMobileSidebar(false);
-                  }}
+                  onClick={() => selectChat(chat.id)}
                   className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs text-left transition cursor-pointer ${
                     currentChatId === chat.id
                       ? "bg-neutral-800 text-white font-medium border border-neutral-700"
@@ -1135,12 +1248,17 @@ export default function ChatApp() {
 
                             <div className="markdown-content">
                               {content ? (
-                                <ReactMarkdown
-                                  remarkPlugins={[remarkGfm]}
-                                  components={markdownComponents}
-                                >
-                                  {content}
-                                </ReactMarkdown>
+                                <>
+                                  <ReactMarkdown
+                                    remarkPlugins={[remarkGfm]}
+                                    components={markdownComponents}
+                                  >
+                                    {content}
+                                  </ReactMarkdown>
+                                  {isStreaming && isLastAssistant && (
+                                    <span className="inline-block w-1.5 h-3.5 ml-1 bg-neutral-300 rounded-xs animate-pulse align-middle" />
+                                  )}
+                                </>
                               ) : isStreaming && isLastAssistant ? (
                                 <div className="flex items-center gap-2 py-1.5 text-neutral-400 text-xs font-mono">
                                   <span className="w-2 h-2 rounded-full bg-neutral-400 animate-pulse"></span>
