@@ -639,8 +639,24 @@ function generateSandboxHtml(language: string, rawCode: string): string {
       <span id="host-label" style="display: none sm:inline;">user@mrai-sandbox:~</span>
     </div>
     <div class="top-actions">
+      <button id="server-btn" class="btn" onclick="toggleServerModal()" style="border-color: #388bfd; color: #58a6ff;">● Serverni ulash</button>
       <button class="btn" onclick="runScriptAgain()">Skriptni qayta boshlash</button>
       <button class="btn" onclick="clearScreen()">Tozalash (clear)</button>
+    </div>
+  </div>
+
+  <div id="server-modal" style="display: none; padding: 10px 12px; background: #161b22; border-bottom: 1px solid #30363d; font-size: 11px;">
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+      <span style="font-weight: 600; color: #58a6ff;">Google Cloud Shell / Haqiqiy Server Havolasi (URL):</span>
+      <button onclick="toggleServerModal()" style="background: none; border: none; color: #8b949e; cursor: pointer; font-size: 13px;">✕</button>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+      <input id="server-url-input" type="text" placeholder="https://....trycloudflare.com" style="flex: 1; min-width: 220px; background: #0d1117; border: 1px solid #30363d; color: #fff; padding: 5px 8px; border-radius: 4px; font-family: inherit; font-size: 11px;" />
+      <button onclick="saveServerUrl()" class="btn" style="background: #238636; border-color: #2ea043; color: #fff; font-weight: 600;">Ulash</button>
+      <button onclick="clearServerUrl()" class="btn">Uzish</button>
+    </div>
+    <div id="server-status-msg" style="color: #8b949e; font-size: 10px; margin-top: 6px;">
+      Google Cloud Shell terminalida berilgan buyruqdan so‘ng chiqqan <code>trycloudflare.com</code> havolasini shu yerga qo‘ying.
     </div>
   </div>
 
@@ -719,7 +735,8 @@ function generateSandboxHtml(language: string, rawCode: string): string {
       const p = formatPath(cwd);
       document.getElementById("prompt-dir").textContent = p;
       const hostLabel = document.getElementById("host-label");
-      if (hostLabel) hostLabel.textContent = "user@mrai-sandbox:" + p;
+      const saved = localStorage.getItem("mrai_server_url");
+      if (hostLabel) hostLabel.textContent = (saved ? "cloudshell:" : "user@mrai-sandbox:") + p;
     }
 
     function focusInput() {
@@ -838,6 +855,31 @@ function generateSandboxHtml(language: string, rawCode: string): string {
     async function execCommand(rawCmd) {
       const trimmed = rawCmd.trim();
       if (!trimmed) return;
+
+      const savedServer = localStorage.getItem("mrai_server_url");
+      if (savedServer) {
+        try {
+          const res = await fetch(savedServer.replace(/\/+$/, "") + "/exec", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ command: trimmed, cwd: cwd })
+          });
+          const data = await res.json();
+          if (data.cwd) {
+            cwd = data.cwd;
+            updatePrompt();
+          }
+          if (data.stdout) {
+            appendLine(data.stdout, "line out-text");
+          }
+          if (data.stderr) {
+            appendLine(data.stderr, "line out-err");
+          }
+          return;
+        } catch (err) {
+          appendLine("Haqiqiy serverga ulanishda xatolik yuz berdi: " + err.message + ". Standart sandboxga o'tildi.", "line out-err");
+        }
+      }
 
       if (trimmed.startsWith("#")) {
         appendLine(trimmed, "line out-info");
@@ -1225,7 +1267,80 @@ function generateSandboxHtml(language: string, rawCode: string): string {
       }
     });
 
+    function checkServerStatus() {
+      const saved = localStorage.getItem("mrai_server_url");
+      const btn = document.getElementById("server-btn");
+      const badge = document.querySelector(".badge");
+      const hostLabel = document.getElementById("host-label");
+      const urlInp = document.getElementById("server-url-input");
+      if (urlInp && saved) urlInp.value = saved;
+
+      if (saved) {
+        if (btn) {
+          btn.textContent = "● Haqiqiy Server: Ulangan";
+          btn.style.color = "#3fb950";
+          btn.style.borderColor = "#238636";
+        }
+        if (badge) {
+          badge.textContent = "Google Cloud Shell (Real Linux)";
+          badge.style.color = "#3fb950";
+        }
+        if (hostLabel) {
+          hostLabel.textContent = "cloudshell:" + formatPath(cwd);
+        }
+      } else {
+        if (btn) {
+          btn.textContent = "● Serverni ulash";
+          btn.style.color = "#58a6ff";
+          btn.style.borderColor = "#388bfd";
+        }
+        if (badge) {
+          badge.textContent = "Ubuntu 24.04 (Wasm/Virtual Linux)";
+          badge.style.color = "#58a6ff";
+        }
+      }
+    }
+
+    function toggleServerModal() {
+      const m = document.getElementById("server-modal");
+      if (m) m.style.display = m.style.display === "none" ? "block" : "none";
+    }
+
+    async function saveServerUrl() {
+      const inp = document.getElementById("server-url-input");
+      const msg = document.getElementById("server-status-msg");
+      let url = inp ? inp.value.trim() : "";
+      if (!url) return;
+      if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        url = "https://" + url;
+      }
+      if (msg) msg.textContent = "Server tekshirilmoqda...";
+      try {
+        await fetch(url.replace(/\/+$/, "") + "/");
+        localStorage.setItem("mrai_server_url", url);
+        if (msg) msg.textContent = "Muvaffaqiyatli ulandi! Barcha buyruqlar Google Cloud Shell da bajariladi.";
+        checkServerStatus();
+        setTimeout(() => { toggleServerModal(); }, 1500);
+      } catch (err) {
+        localStorage.setItem("mrai_server_url", url);
+        if (msg) msg.textContent = "URL saqlandi. Bog'lanish sinab ko'riladi.";
+        checkServerStatus();
+        setTimeout(() => { toggleServerModal(); }, 1500);
+      }
+    }
+
+    function clearServerUrl() {
+      localStorage.removeItem("mrai_server_url");
+      const inp = document.getElementById("server-url-input");
+      const msg = document.getElementById("server-status-msg");
+      if (inp) inp.value = "";
+      if (msg) msg.textContent = "Server uzildi. Standart qumloq (Sandbox) rejimiga qaytildi.";
+      checkServerStatus();
+      setTimeout(() => { toggleServerModal(); }, 1500);
+    }
+
     window.addEventListener("load", () => {
+      checkServerStatus();
       runInitialScript();
     });
   </script>
