@@ -26,18 +26,35 @@ import {
   Sparkles,
   PenTool,
   Compass,
+  Play,
+  Eye,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import SettingsModal from "./SettingsModal";
+import ArtifactPanel, {
+  ArtifactData,
+  isArtifactPreviewable,
+  getArtifactTitle,
+} from "./ArtifactPanel";
 import type { Chat, Message, UserApiKey } from "@/types";
 import { loadSettings, AppSettings, DEFAULT_SETTINGS } from "@/lib/settings";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-// CodeBlock with Language Header & Copy Button
-function CodeBlock({ language, value }: { language?: string; value: string }) {
+// CodeBlock with Language Header, Copy Button & Claude-style Artifact Runner
+function CodeBlock({
+  language,
+  value,
+  onOpenArtifact,
+}: {
+  language?: string;
+  value: string;
+  onOpenArtifact?: (data: ArtifactData) => void;
+}) {
   const [copied, setCopied] = useState(false);
+  const lang = (language || "").toLowerCase().trim();
+  const canPreview = isArtifactPreviewable(lang, value);
 
   const handleCopy = async () => {
     try {
@@ -47,28 +64,71 @@ function CodeBlock({ language, value }: { language?: string; value: string }) {
     } catch {}
   };
 
+  const handleOpen = () => {
+    onOpenArtifact?.({
+      title: getArtifactTitle(lang, value),
+      language: lang || "html",
+      code: value,
+    });
+  };
+
   return (
     <div className="my-3.5 rounded-xl border border-neutral-800 bg-neutral-900/95 overflow-hidden text-xs shadow-md">
-      <div className="flex items-center justify-between px-3.5 py-2 border-b border-neutral-800 bg-neutral-950/80 text-neutral-400 font-mono">
+      {/* Claude-style Artifact Banner if previewable */}
+      {canPreview && (
+        <div className="flex items-center justify-between px-3.5 py-2.5 bg-neutral-950/90 border-b border-neutral-800">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-md bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
+              <Sparkles className="w-3 h-3 text-blue-400" />
+            </div>
+            <div>
+              <div className="text-xs font-semibold text-neutral-200">
+                {getArtifactTitle(lang, value)}
+              </div>
+              <div className="text-[10px] text-neutral-400">Interaktiv Claude Artifact</div>
+            </div>
+          </div>
+          <button
+            onClick={handleOpen}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition cursor-pointer shadow-sm"
+          >
+            <Play className="w-3 h-3 fill-current" />
+            <span>Ishga tushirish</span>
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between px-3.5 py-2 border-b border-neutral-800 bg-neutral-950/60 text-neutral-400 font-mono">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-300">
           {language || "kod"}
         </span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-neutral-800 text-neutral-300 hover:text-white transition cursor-pointer"
-        >
-          {copied ? (
-            <>
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-emerald-400 font-medium">Nusxalandi</span>
-            </>
-          ) : (
-            <>
-              <Copy className="w-3.5 h-3.5" />
-              <span>Nusxalash</span>
-            </>
+        <div className="flex items-center gap-1.5">
+          {canPreview && (
+            <button
+              onClick={handleOpen}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-neutral-800 text-blue-400 hover:text-blue-300 transition cursor-pointer"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>Ko‘rish</span>
+            </button>
           )}
-        </button>
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-neutral-800 text-neutral-300 hover:text-white transition cursor-pointer"
+          >
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-emerald-400 font-medium">Nusxalandi</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5" />
+                <span>Nusxalash</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
       <div className="p-4 overflow-x-auto font-mono text-[13px] leading-relaxed text-neutral-100">
         <pre>{value}</pre>
@@ -144,6 +204,7 @@ export default function ChatApp() {
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
+  const [activeArtifact, setActiveArtifact] = useState<ArtifactData | null>(null);
 
   // Chat renaming state
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
@@ -873,7 +934,13 @@ export default function ChatApp() {
       const match = /language-(\w+)/.exec(className || "");
       const codeValue = String(children).replace(/\n$/, "");
       if (match || codeValue.includes("\n")) {
-        return <CodeBlock language={match ? match[1] : undefined} value={codeValue} />;
+        return (
+          <CodeBlock
+            language={match ? match[1] : undefined}
+            value={codeValue}
+            onOpenArtifact={(data) => setActiveArtifact(data)}
+          />
+        );
       }
       return (
         <code className="bg-neutral-800/80 text-neutral-200 px-1.5 py-0.5 rounded text-[12px] font-mono border border-neutral-700/50" {...props}>
@@ -1383,6 +1450,11 @@ export default function ChatApp() {
           </div>
         </div>
       </div>
+
+      <ArtifactPanel
+        artifact={activeArtifact}
+        onClose={() => setActiveArtifact(null)}
+      />
 
       <SettingsModal
         open={settingsOpen}
