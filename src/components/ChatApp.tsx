@@ -568,10 +568,22 @@ function getDefaultBaseUrl(provider: string): string {
   switch (provider) {
     case "groq":
       return "https://api.groq.com/openai/v1";
+    case "deepseek":
+      return "https://api.deepseek.com/v1";
     case "openai":
       return "https://api.openai.com/v1";
+    case "gemini":
+      return "https://generativelanguage.googleapis.com/v1beta/openai";
     case "openrouter":
       return "https://openrouter.ai/api/v1";
+    case "xai":
+      return "https://api.x.ai/v1";
+    case "mistral":
+      return "https://api.mistral.ai/v1";
+    case "together":
+      return "https://api.together.xyz/v1";
+    case "perplexity":
+      return "https://api.perplexity.ai";
     case "anthropic":
       return "https://api.anthropic.com/v1";
     default:

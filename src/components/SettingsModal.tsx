@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Key, Plus, Trash2, Check, X } from "lucide-react";
+import { Key, Plus, Trash2, Check, X, ShieldAlert, CheckCircle2, Loader2 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import type { UserApiKey, Provider } from "@/types";
@@ -11,12 +11,154 @@ interface Props {
   onClose: () => void;
 }
 
-const PROVIDERS: { value: Provider; label: string; defaultModel: string; placeholder: string }[] = [
-  { value: "groq", label: "Groq (Eng tez, bepul limitlar)", defaultModel: "llama-3.3-70b-versatile", placeholder: "gsk_..." },
-  { value: "openai", label: "OpenAI", defaultModel: "gpt-4o", placeholder: "sk-proj-..." },
-  { value: "openrouter", label: "OpenRouter (Barcha modellar)", defaultModel: "anthropic/claude-3.5-sonnet", placeholder: "sk-or-v1-..." },
-  { value: "anthropic", label: "Anthropic", defaultModel: "claude-3-5-sonnet-20241022", placeholder: "sk-ant-..." },
-  { value: "custom", label: "Custom / Boshqa", defaultModel: "", placeholder: "API key" },
+export interface ProviderOption {
+  value: Provider;
+  label: string;
+  placeholder: string;
+  defaultModel: string;
+  defaultBaseUrl: string;
+  models: { id: string; name: string }[];
+}
+
+export const PROVIDERS: ProviderOption[] = [
+  {
+    value: "groq",
+    label: "Groq (Ultra tez, bepul limitlar)",
+    placeholder: "gsk_...",
+    defaultModel: "llama-3.3-70b-versatile",
+    defaultBaseUrl: "https://api.groq.com/openai/v1",
+    models: [
+      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Tavsiya etiladi)" },
+      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant (Juda tez)" },
+      { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill 70B (Mantiqiy fikrlash)" },
+      { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B (32k kontekst)" },
+      { id: "gemma2-9b-it", name: "Google Gemma 2 9B" },
+    ],
+  },
+  {
+    value: "deepseek",
+    label: "DeepSeek (R1 & V3)",
+    placeholder: "sk-...",
+    defaultModel: "deepseek-chat",
+    defaultBaseUrl: "https://api.deepseek.com/v1",
+    models: [
+      { id: "deepseek-chat", name: "DeepSeek-V3 (Umumiy universal)" },
+      { id: "deepseek-reasoner", name: "DeepSeek-R1 (Fikrlash / Reasoning)" },
+    ],
+  },
+  {
+    value: "openai",
+    label: "OpenAI (ChatGPT)",
+    placeholder: "sk-proj-...",
+    defaultModel: "gpt-4o",
+    defaultBaseUrl: "https://api.openai.com/v1",
+    models: [
+      { id: "gpt-4o", name: "GPT-4o (Eng aqlli va ko‘p qirrali)" },
+      { id: "gpt-4o-mini", name: "GPT-4o Mini (Tez va tejamkor)" },
+      { id: "o3-mini", name: "o3-mini (Reasoning / Dasturlash)" },
+      { id: "o1", name: "o1 (Chuqur fikrlovchi model)" },
+      { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
+      { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+    ],
+  },
+  {
+    value: "gemini",
+    label: "Google Gemini (Google AI Studio)",
+    placeholder: "AIzaSy...",
+    defaultModel: "gemini-2.0-flash",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    models: [
+      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (Yangi avlod, tez)" },
+      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
+      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (2M ulkan kontekst)" },
+    ],
+  },
+  {
+    value: "openrouter",
+    label: "OpenRouter (Barcha modellar)",
+    placeholder: "sk-or-v1-...",
+    defaultModel: "anthropic/claude-3.5-sonnet",
+    defaultBaseUrl: "https://openrouter.ai/api/v1",
+    models: [
+      { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
+      { id: "anthropic/claude-3.7-sonnet", name: "Claude 3.7 Sonnet" },
+      { id: "deepseek/deepseek-r1", name: "DeepSeek R1" },
+      { id: "deepseek/deepseek-chat", name: "DeepSeek V3" },
+      { id: "openai/gpt-4o", name: "OpenAI GPT-4o" },
+      { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash" },
+      { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B" },
+    ],
+  },
+  {
+    value: "xai",
+    label: "xAI (Grok)",
+    placeholder: "xai-...",
+    defaultModel: "grok-2-latest",
+    defaultBaseUrl: "https://api.x.ai/v1",
+    models: [
+      { id: "grok-2-latest", name: "Grok 2" },
+      { id: "grok-2-vision-latest", name: "Grok 2 Vision" },
+      { id: "grok-beta", name: "Grok Beta" },
+    ],
+  },
+  {
+    value: "anthropic",
+    label: "Anthropic (Claude)",
+    placeholder: "sk-ant-api03-...",
+    defaultModel: "claude-3-5-sonnet-20241022",
+    defaultBaseUrl: "https://api.anthropic.com/v1",
+    models: [
+      { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet" },
+      { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku" },
+      { id: "claude-3-opus-20240229", name: "Claude 3 Opus" },
+    ],
+  },
+  {
+    value: "mistral",
+    label: "Mistral AI",
+    placeholder: "mistral_api_key...",
+    defaultModel: "mistral-large-latest",
+    defaultBaseUrl: "https://api.mistral.ai/v1",
+    models: [
+      { id: "mistral-large-latest", name: "Mistral Large" },
+      { id: "mistral-small-latest", name: "Mistral Small" },
+      { id: "codestral-latest", name: "Codestral (Dasturchilar uchun)" },
+      { id: "open-mistral-nemo", name: "Mistral Nemo" },
+    ],
+  },
+  {
+    value: "together",
+    label: "Together AI",
+    placeholder: "together_api_key...",
+    defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    defaultBaseUrl: "https://api.together.xyz/v1",
+    models: [
+      { id: "meta-llama/Llama-3.3-70B-Instruct-Turbo", name: "Llama 3.3 70B Turbo" },
+      { id: "deepseek-ai/DeepSeek-R1", name: "DeepSeek R1" },
+      { id: "deepseek-ai/DeepSeek-V3", name: "DeepSeek V3" },
+      { id: "Qwen/Qwen2.5-72B-Instruct-Turbo", name: "Qwen 2.5 72B Turbo" },
+    ],
+  },
+  {
+    value: "perplexity",
+    label: "Perplexity AI (Web qidiruv)",
+    placeholder: "pplx-...",
+    defaultModel: "sonar-pro",
+    defaultBaseUrl: "https://api.perplexity.ai",
+    models: [
+      { id: "sonar-pro", name: "Sonar Pro (Qidiruvli chuqur javob)" },
+      { id: "sonar", name: "Sonar (Tezkor qidiruv)" },
+      { id: "sonar-reasoning", name: "Sonar Reasoning" },
+    ],
+  },
+  {
+    value: "custom",
+    label: "Custom / Boshqa (OpenAI-mos)",
+    placeholder: "sk-...",
+    defaultModel: "",
+    defaultBaseUrl: "",
+    models: [],
+  },
 ];
 
 export default function SettingsModal({ open, onClose }: Props) {
@@ -30,10 +172,15 @@ export default function SettingsModal({ open, onClose }: Props) {
   const [name, setName] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState("llama-3.3-70b-versatile");
-  const [baseUrl, setBaseUrl] = useState("");
+  const [isCustomModel, setIsCustomModel] = useState(false);
+  const [customModelName, setCustomModelName] = useState("");
+  const [baseUrl, setBaseUrl] = useState("https://api.groq.com/openai/v1");
   const [isDefault, setIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
   const [error, setError] = useState("");
+
+  const currentProvider = PROVIDERS.find((p) => p.value === provider) || PROVIDERS[0];
 
   useEffect(() => {
     if (open && user) {
@@ -55,37 +202,69 @@ export default function SettingsModal({ open, onClose }: Props) {
 
   function onProviderChange(p: Provider) {
     setProvider(p);
+    setError("");
     const found = PROVIDERS.find((x) => x.value === p);
     if (found) {
+      setIsCustomModel(found.models.length === 0);
+      setCustomModelName("");
       setModel(found.defaultModel);
-      if (p === "groq") setBaseUrl("https://api.groq.com/openai/v1");
-      else if (p === "openai") setBaseUrl("https://api.openai.com/v1");
-      else if (p === "openrouter") setBaseUrl("https://openrouter.ai/api/v1");
-      else if (p === "anthropic") setBaseUrl("https://api.anthropic.com/v1");
-      else setBaseUrl("");
+      setBaseUrl(found.defaultBaseUrl);
     }
   }
 
   async function handleSave() {
-    if (!apiKey.trim()) {
-      setError("API key kiritilishi shart");
+    setError("");
+    const trimmedKey = apiKey.trim();
+    const finalModel = isCustomModel ? customModelName.trim() : model.trim();
+
+    if (!trimmedKey) {
+      setError("Iltimos, API kalitni kiriting");
       return;
     }
-    if (!model.trim()) {
-      setError("Model nomi kiritilishi shart");
+    if (!finalModel) {
+      setError("Iltimos, modelni tanlang yoki nomini kiriting");
       return;
     }
 
     setSaving(true);
-    setError("");
+    setStatusMessage("API kalit tekshirilmoqda...");
 
+    // 1. API kalitni server orqali haqiqiyligini tekshirish
+    try {
+      const validateRes = await fetch("/api/validate-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          apiKey: trimmedKey,
+          model: finalModel,
+          baseUrl: baseUrl.trim() || undefined,
+        }),
+      });
+
+      const validateData = await validateRes.json();
+
+      if (!validateData.valid) {
+        // Kalit xato bo'lsa, SAQLANMAYDI!
+        setError(validateData.error || "API kalit yaroqsiz! Saqlanmadi.");
+        setSaving(false);
+        setStatusMessage("");
+        return;
+      }
+    } catch (err: any) {
+      setError("Tekshirishda xatolik yuz berdi: " + err.message);
+      setSaving(false);
+      setStatusMessage("");
+      return;
+    }
+
+    // 2. Kalit to‘g‘ri bo‘lsa, Supabase'ga saqlash
+    setStatusMessage("Kalit to‘g‘ri! Saqlanmoqda...");
     const supabase = await getSupabaseBrowserClient();
 
-    // Agar bu birinchi key bo‘lsa yoki isDefault belgilangan bo‘lsa
     const shouldBeDefault = isDefault || keys.length === 0;
 
     if (shouldBeDefault) {
-      // Boshqa barcha defaultlarni false qilamiz
       await supabase
         .from("user_api_keys")
         .update({ is_default: false })
@@ -95,9 +274,9 @@ export default function SettingsModal({ open, onClose }: Props) {
     const { error: insertError } = await supabase.from("user_api_keys").insert({
       user_id: user?.id,
       provider,
-      name: name.trim() || `${provider.toUpperCase()} (${model})`,
-      api_key: apiKey.trim(),
-      model: model.trim(),
+      name: name.trim() || `${currentProvider.label.split(" ")[0]} (${finalModel})`,
+      api_key: trimmedKey,
+      model: finalModel,
       base_url: baseUrl.trim() || null,
       is_default: shouldBeDefault,
     });
@@ -105,6 +284,7 @@ export default function SettingsModal({ open, onClose }: Props) {
     if (insertError) {
       setError(insertError.message);
       setSaving(false);
+      setStatusMessage("");
       return;
     }
 
@@ -114,6 +294,7 @@ export default function SettingsModal({ open, onClose }: Props) {
     setIsDefault(false);
     setShowForm(false);
     setSaving(false);
+    setStatusMessage("");
     loadKeys();
   }
 
@@ -144,7 +325,7 @@ export default function SettingsModal({ open, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
 
       {/* Modal */}
       <div className="relative w-full max-w-lg bg-neutral-900 text-neutral-100 rounded-2xl shadow-2xl border border-neutral-800 max-h-[90vh] flex flex-col">
@@ -167,7 +348,7 @@ export default function SettingsModal({ open, onClose }: Props) {
           {!showForm ? (
             <>
               <p className="text-sm text-neutral-400 mb-4">
-                Istagan provayder va model uchun o‘z API keylaringizni qo‘shing. Kalitlar faqat sizning accountingizda saqlanadi.
+                Istagan AI provayderi uchun o‘z API kalitlaringizni qo‘shing. Kalitlar xavfsiz holda faqat sizning hisobingizda saqlanadi.
               </p>
 
               {loading ? (
@@ -177,7 +358,10 @@ export default function SettingsModal({ open, onClose }: Props) {
                   <Key className="w-8 h-8 text-neutral-600 mx-auto mb-3" />
                   <p className="text-sm text-neutral-400 mb-4">Hali API key qo‘shilmagan</p>
                   <button
-                    onClick={() => setShowForm(true)}
+                    onClick={() => {
+                      setShowForm(true);
+                      onProviderChange("groq");
+                    }}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white text-neutral-950 text-sm font-medium hover:bg-neutral-200 transition cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
@@ -203,7 +387,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                           )}
                         </div>
                         <div className="text-xs text-neutral-400 mt-0.5">
-                          {k.provider} · {k.model}
+                          {k.provider.toUpperCase()} · {k.model}
                         </div>
                         <div className="text-xs text-neutral-500 mt-0.5 font-mono">
                           {k.api_key.slice(0, 8)}••••••••
@@ -213,7 +397,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                         {!k.is_default && (
                           <button
                             onClick={() => setAsDefault(k.id)}
-                            title="Default qilish"
+                            title="Asosiy qilish"
                             className="p-1.5 rounded-lg hover:bg-neutral-800 transition text-neutral-400 hover:text-white cursor-pointer"
                           >
                             <Check className="w-4 h-4" />
@@ -230,7 +414,10 @@ export default function SettingsModal({ open, onClose }: Props) {
                   ))}
 
                   <button
-                    onClick={() => setShowForm(true)}
+                    onClick={() => {
+                      setShowForm(true);
+                      onProviderChange("groq");
+                    }}
                     className="w-full mt-2 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-dashed border-neutral-800 text-sm text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200 transition cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
@@ -241,14 +428,15 @@ export default function SettingsModal({ open, onClose }: Props) {
             </>
           ) : (
             <div className="space-y-4">
+              {/* Provider Selection */}
               <div>
                 <label className="block text-sm font-medium text-neutral-300 mb-1.5">
-                  Provider
+                  AI Provayder
                 </label>
                 <select
                   value={provider}
                   onChange={(e) => onProviderChange(e.target.value as Provider)}
-                  className="w-full h-10 px-3 rounded-lg border border-neutral-800 text-sm bg-neutral-950 text-neutral-100 focus:border-neutral-600 focus:outline-none cursor-pointer"
+                  className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 text-sm bg-neutral-950 text-neutral-100 focus:border-neutral-600 focus:outline-none cursor-pointer"
                 >
                   {PROVIDERS.map((p) => (
                     <option key={p.value} value={p.value} className="bg-neutral-900 text-neutral-100">
@@ -258,89 +446,157 @@ export default function SettingsModal({ open, onClose }: Props) {
                 </select>
               </div>
 
+              {/* API Key Input with exact placeholder */}
               <div>
-                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
-                  Nom (ixtiyoriy)
-                </label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Masalan: My Groq Key"
-                  className="w-full h-10 px-3 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
-                  API Key *
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-sm font-medium text-neutral-300">
+                    API Key *
+                  </label>
+                  <span className="text-[11px] text-neutral-500 font-mono">
+                    Format: {currentProvider.placeholder}
+                  </span>
+                </div>
                 <input
                   type="password"
                   value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-... yoki gsk_..."
-                  className="w-full h-10 px-3 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm font-mono focus:border-neutral-600 focus:outline-none"
+                  onChange={(e) => {
+                    setApiKey(e.target.value);
+                    setError("");
+                  }}
+                  placeholder={currentProvider.placeholder}
+                  className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm font-mono focus:border-neutral-600 focus:outline-none transition"
                 />
               </div>
 
+              {/* Model Dropdown + Custom option */}
               <div>
                 <label className="block text-sm font-medium text-neutral-300 mb-1.5">
                   Model *
                 </label>
+                {currentProvider.models.length > 0 ? (
+                  <div className="space-y-2">
+                    <select
+                      value={isCustomModel ? "__custom__" : model}
+                      onChange={(e) => {
+                        if (e.target.value === "__custom__") {
+                          setIsCustomModel(true);
+                          setCustomModelName("");
+                        } else {
+                          setIsCustomModel(false);
+                          setModel(e.target.value);
+                        }
+                      }}
+                      className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 text-sm focus:border-neutral-600 focus:outline-none cursor-pointer"
+                    >
+                      {currentProvider.models.map((m) => (
+                        <option key={m.id} value={m.id} className="bg-neutral-900 text-neutral-100">
+                          {m.name}
+                        </option>
+                      ))}
+                      <option value="__custom__" className="bg-neutral-900 text-neutral-100">
+                        + Boshqa model (Nomini qo‘lda kiritish)...
+                      </option>
+                    </select>
+
+                    {isCustomModel && (
+                      <input
+                        value={customModelName}
+                        onChange={(e) => setCustomModelName(e.target.value)}
+                        placeholder="Model aniq identifikatorini kiriting (masalan: gpt-4o)"
+                        className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <input
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    placeholder="Model nomini kiriting (masalan: gpt-4o)"
+                    className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                  />
+                )}
+              </div>
+
+              {/* Optional Name */}
+              <div>
+                <label className="block text-sm font-medium text-neutral-300 mb-1.5">
+                  Kalit nomi (Ixtiyoriy)
+                </label>
                 <input
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder="llama-3.3-70b-versatile"
-                  className="w-full h-10 px-3 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder={`Masalan: Mening ${currentProvider.label.split(" ")[0]} kalitim`}
+                  className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
                 />
               </div>
 
+              {/* Base URL (for custom or openrouter) */}
               {(provider === "custom" || provider === "openrouter") && (
                 <div>
                   <label className="block text-sm font-medium text-neutral-300 mb-1.5">
-                    Base URL
+                    Base URL (API Endpoint)
                   </label>
                   <input
                     value={baseUrl}
                     onChange={(e) => setBaseUrl(e.target.value)}
                     placeholder="https://api.example.com/v1"
-                    className="w-full h-10 px-3 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                    className="w-full h-11 px-3.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none font-mono text-xs"
                   />
                 </div>
               )}
 
-              <label className="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer">
+              {/* Is Default Checkbox */}
+              <label className="flex items-center gap-2 text-sm text-neutral-300 cursor-pointer pt-1">
                 <input
                   type="checkbox"
                   checked={isDefault}
                   onChange={(e) => setIsDefault(e.target.checked)}
-                  className="rounded border-neutral-700 bg-neutral-950 text-white focus:ring-0"
+                  className="w-4 h-4 rounded border-neutral-700 bg-neutral-950 text-white focus:ring-0 cursor-pointer"
                 />
-                Default key sifatida belgilash
+                Asosiy (Default) kalit sifatida belgilash
               </label>
 
-              {error && (
-                <p className="text-sm text-red-400 bg-red-950/50 border border-red-900/50 px-3 py-2 rounded-lg">
-                  {error}
-                </p>
+              {/* Validation Status / Error */}
+              {statusMessage && (
+                <div className="flex items-center gap-2 text-sm text-blue-400 bg-blue-950/40 border border-blue-900/50 px-3.5 py-2.5 rounded-lg">
+                  <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                  <span>{statusMessage}</span>
+                </div>
               )}
 
+              {error && (
+                <div className="flex items-start gap-2 text-sm text-red-400 bg-red-950/60 border border-red-900/60 px-3.5 py-2.5 rounded-lg">
+                  <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => {
                     setShowForm(false);
                     setError("");
+                    setStatusMessage("");
                   }}
-                  className="flex-1 h-10 rounded-lg border border-neutral-800 text-sm font-medium text-neutral-300 hover:bg-neutral-800 transition cursor-pointer"
+                  disabled={saving}
+                  className="flex-1 h-11 rounded-lg border border-neutral-800 text-sm font-medium text-neutral-300 hover:bg-neutral-800 transition cursor-pointer disabled:opacity-50"
                 >
                   Bekor qilish
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className="flex-1 h-10 rounded-lg bg-white text-neutral-950 text-sm font-medium hover:bg-neutral-200 transition disabled:opacity-50 cursor-pointer"
+                  className="flex-1 h-11 rounded-lg bg-white text-neutral-950 text-sm font-medium hover:bg-neutral-200 transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
                 >
-                  {saving ? "Saqlanmoqda..." : "Saqlash"}
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Tekshirilmoqda...
+                    </>
+                  ) : (
+                    "Saqlash"
+                  )}
                 </button>
               </div>
             </div>

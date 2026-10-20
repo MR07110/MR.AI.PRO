@@ -1,4 +1,16 @@
-export type Provider = 'groq' | 'openai' | 'openrouter' | 'anthropic' | 'custom';
+export type Provider =
+  | 'groq'
+  | 'deepseek'
+  | 'openai'
+  | 'gemini'
+  | 'openrouter'
+  | 'anthropic'
+  | 'xai'
+  | 'mistral'
+  | 'together'
+  | 'perplexity'
+  | 'custom'
+  | string;
 
 export interface UserApiKey {
   id: string;
