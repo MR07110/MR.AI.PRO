@@ -17,6 +17,7 @@ import {
   Check,
   RotateCcw,
   Pencil,
+  Trash2,
   ArrowDown,
   Brain,
   ChevronDown,
@@ -47,14 +48,14 @@ function CodeBlock({ language, value }: { language?: string; value: string }) {
   };
 
   return (
-    <div className="my-3 rounded-xl border border-neutral-800 bg-neutral-900/95 overflow-hidden text-xs">
-      <div className="flex items-center justify-between px-3.5 py-2 border-b border-neutral-800 bg-neutral-950/70 text-neutral-400 font-mono">
+    <div className="my-3.5 rounded-xl border border-neutral-800 bg-neutral-900/95 overflow-hidden text-xs shadow-md">
+      <div className="flex items-center justify-between px-3.5 py-2 border-b border-neutral-800 bg-neutral-950/80 text-neutral-400 font-mono">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-neutral-300">
           {language || "kod"}
         </span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-neutral-800 text-neutral-300 hover:text-white transition cursor-pointer"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md hover:bg-neutral-800 text-neutral-300 hover:text-white transition cursor-pointer"
         >
           {copied ? (
             <>
@@ -127,6 +128,10 @@ export default function ChatApp() {
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
+
+  // Chat renaming state
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
@@ -227,6 +232,20 @@ export default function ChatApp() {
       setCurrentChatId(null);
       setMessages([]);
     }
+  }
+
+  async function saveChatTitle(id: string) {
+    if (!editingTitle.trim()) {
+      setEditingChatId(null);
+      return;
+    }
+    const cleanTitle = editingTitle.trim();
+    const supabase = await getSupabaseBrowserClient();
+    await supabase.from("chats").update({ title: cleanTitle }).eq("id", id);
+    setChats((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, title: cleanTitle } : c))
+    );
+    setEditingChatId(null);
   }
 
   // Copy assistant response
@@ -445,7 +464,6 @@ export default function ChatApp() {
   async function regenerateResponse() {
     if (isStreaming || !currentChatId || messages.length === 0) return;
 
-    // Find last user message index
     let lastUserIdx = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "user") {
@@ -458,7 +476,6 @@ export default function ChatApp() {
     const trimmedMessages = messages.slice(0, lastUserIdx + 1);
     setMessages(trimmedMessages);
 
-    // Delete newer assistant messages in Supabase
     const supabase = await getSupabaseBrowserClient();
     const cutTime = trimmedMessages[lastUserIdx].created_at;
     await supabase
@@ -553,18 +570,102 @@ export default function ChatApp() {
     },
   ];
 
+  // Markdown custom renderers
+  const markdownComponents = {
+    table({ children }: any) {
+      return (
+        <div className="my-3.5 w-full overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-950/40">
+          <table className="w-full text-left text-xs sm:text-sm border-collapse">{children}</table>
+        </div>
+      );
+    },
+    thead({ children }: any) {
+      return <thead className="bg-neutral-900/90 border-b border-neutral-800 text-neutral-200">{children}</thead>;
+    },
+    tbody({ children }: any) {
+      return <tbody className="divide-y divide-neutral-800/80">{children}</tbody>;
+    },
+    tr({ children }: any) {
+      return <tr className="hover:bg-neutral-900/40 transition">{children}</tr>;
+    },
+    th({ children }: any) {
+      return (
+        <th className="px-3.5 py-2.5 font-semibold text-xs tracking-wider uppercase text-neutral-300 border-r border-neutral-800/60 last:border-r-0 whitespace-nowrap">
+          {children}
+        </th>
+      );
+    },
+    td({ children }: any) {
+      return (
+        <td className="px-3.5 py-2.5 text-xs sm:text-sm text-neutral-300 border-r border-neutral-800/60 last:border-r-0">
+          {children}
+        </td>
+      );
+    },
+    ul({ children }: any) {
+      return <ul className="my-2 pl-5 list-disc space-y-1 text-neutral-300">{children}</ul>;
+    },
+    ol({ children }: any) {
+      return <ol className="my-2 pl-5 list-decimal space-y-1 text-neutral-300">{children}</ol>;
+    },
+    li({ children }: any) {
+      return <li className="leading-relaxed">{children}</li>;
+    },
+    blockquote({ children }: any) {
+      return (
+        <blockquote className="my-2.5 pl-3.5 border-l-2 border-neutral-600 italic text-neutral-400 bg-neutral-900/30 py-1 rounded-r-lg">
+          {children}
+        </blockquote>
+      );
+    },
+    h1({ children }: any) {
+      return <h1 className="text-lg sm:text-xl font-bold text-neutral-100 mt-4 mb-2 pb-1 border-b border-neutral-800">{children}</h1>;
+    },
+    h2({ children }: any) {
+      return <h2 className="text-base sm:text-lg font-bold text-neutral-100 mt-3.5 mb-1.5">{children}</h2>;
+    },
+    h3({ children }: any) {
+      return <h3 className="text-sm sm:text-base font-semibold text-neutral-200 mt-3 mb-1">{children}</h3>;
+    },
+    p({ children }: any) {
+      return <p className="my-1.5 leading-relaxed text-neutral-300">{children}</p>;
+    },
+    a({ href, children }: any) {
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
+          {children}
+        </a>
+      );
+    },
+    hr() {
+      return <hr className="my-3.5 border-neutral-800" />;
+    },
+    code({ node, className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || "");
+      const codeValue = String(children).replace(/\n$/, "");
+      if (match || codeValue.includes("\n")) {
+        return <CodeBlock language={match ? match[1] : undefined} value={codeValue} />;
+      }
+      return (
+        <code className="bg-neutral-800/80 text-neutral-200 px-1.5 py-0.5 rounded text-[12px] font-mono border border-neutral-700/50" {...props}>
+          {children}
+        </code>
+      );
+    },
+  };
+
   return (
     <div className={`h-screen flex ${themeBg} text-neutral-100 overflow-hidden`}>
-      {/* Sidebar */}
+      {/* Desktop & Tablet Sidebar */}
       <aside
         className={`${
-          sidebarOpen ? "w-[260px]" : "w-0"
-        } hidden md:flex flex-col border-r border-neutral-800 bg-neutral-900 transition-all duration-200 overflow-hidden shrink-0`}
+          sidebarOpen ? "w-[270px]" : "w-0"
+        } hidden md:flex flex-col border-r border-neutral-800/80 bg-neutral-900/95 transition-all duration-200 overflow-hidden shrink-0 shadow-sm`}
       >
         <div className="p-3">
           <button
             onClick={createNewChat}
-            className="w-full flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 text-sm font-semibold hover:bg-neutral-800 transition cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 text-xs font-semibold hover:bg-neutral-800/90 transition cursor-pointer shadow-sm"
           >
             <Plus className="w-4 h-4" />
             Yangi suhbat
@@ -573,144 +674,245 @@ export default function ChatApp() {
 
         <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
           {chats.map((chat) => (
-            <button
+            <div
               key={chat.id}
               onClick={() => setCurrentChatId(chat.id)}
-              className={`w-full group flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-left transition cursor-pointer ${
+              className={`w-full group flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-left transition cursor-pointer ${
                 currentChatId === chat.id
-                  ? "bg-neutral-800 text-neutral-100 font-medium"
-                  : "text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200"
+                  ? "bg-neutral-800/90 text-white font-medium border border-neutral-700/60"
+                  : "text-neutral-400 hover:bg-neutral-800/40 hover:text-neutral-200"
               }`}
             >
-              <MessageSquare className="w-4 h-4 shrink-0 opacity-60" />
-              <span className="truncate flex-1">{chat.title}</span>
-              <span
-                onClick={(e) => deleteChat(chat.id, e)}
-                title="O‘chirish"
-                className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 transition"
-              >
-                <X className="w-3.5 h-3.5" />
-              </span>
-            </button>
+              <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
+
+              {editingChatId === chat.id ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    saveChatTitle(chat.id);
+                  }}
+                  className="flex-1 min-w-0"
+                >
+                  <input
+                    type="text"
+                    value={editingTitle}
+                    onChange={(e) => setEditingTitle(e.target.value)}
+                    onBlur={() => saveChatTitle(chat.id)}
+                    autoFocus
+                    className="w-full bg-neutral-950 border border-neutral-600 rounded px-1.5 py-0.5 text-xs text-white focus:outline-none"
+                  />
+                </form>
+              ) : (
+                <span className="truncate flex-1">{chat.title}</span>
+              )}
+
+              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingChatId(chat.id);
+                    setEditingTitle(chat.title);
+                  }}
+                  title="Nomini o‘zgartirish"
+                  className="p-1 hover:text-white transition cursor-pointer"
+                >
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => deleteChat(chat.id, e)}
+                  title="O‘chirish"
+                  className="p-1 hover:text-red-400 transition cursor-pointer"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
           ))}
         </div>
 
-        {/* User section */}
-        <div className="p-3 border-t border-neutral-800 space-y-1">
+        {/* User profile & settings footer */}
+        <div className="p-3 border-t border-neutral-800/80 space-y-1.5 bg-neutral-950/40">
           <button
             onClick={() => {
               setSettingsOpen(true);
               loadDefaultKey();
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-neutral-300 hover:bg-neutral-800 transition cursor-pointer"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-neutral-300 hover:bg-neutral-800/80 transition cursor-pointer"
           >
-            <Settings className="w-4 h-4" />
+            <Settings className="w-3.5 h-3.5" />
             Sozlamalar (Settings)
           </button>
-          <div className="flex items-center gap-2.5 px-3 py-2">
-            <div className="w-7 h-7 rounded-full bg-neutral-800 border border-neutral-700 text-white flex items-center justify-center text-xs font-semibold uppercase">
+          <div className="flex items-center gap-2 px-3 py-1.5">
+            <div className="w-6 h-6 rounded-full bg-neutral-800 border border-neutral-700 text-white flex items-center justify-center text-[10px] font-bold uppercase shrink-0">
               {displayName.charAt(0)}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate text-neutral-200">{displayName}</p>
-              <p className="text-[11px] text-neutral-500 truncate">@{displayUsername}</p>
+              <p className="text-xs font-semibold truncate text-neutral-200">{displayName}</p>
+              <p className="text-[10px] text-neutral-500 truncate">@{displayUsername}</p>
             </div>
             <button
               onClick={signOut}
               title="Chiqish"
-              className="p-1.5 rounded-lg hover:bg-neutral-800 transition text-neutral-400 hover:text-neutral-200 cursor-pointer"
+              className="p-1 rounded-md hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 transition cursor-pointer"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Mobile sidebar overlay */}
+      {/* Mobile Drawer Sidebar */}
       {mobileSidebar && (
-        <div className="md:hidden fixed inset-0 z-40 flex">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileSidebar(false)} />
-          <div className="relative w-[280px] bg-neutral-900 text-neutral-100 flex flex-col h-full border-r border-neutral-800">
-            <div className="p-3 flex items-center justify-between border-b border-neutral-800">
-              <span className="font-semibold text-sm">Suhbatlar</span>
-              <button onClick={() => setMobileSidebar(false)} className="p-1 text-neutral-400 hover:text-white">
-                <X className="w-5 h-5" />
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setMobileSidebar(false)} />
+          <div className="relative w-[280px] max-w-[85vw] bg-neutral-900 text-neutral-100 flex flex-col h-full border-r border-neutral-800 z-10 shadow-2xl">
+            <div className="p-3.5 flex items-center justify-between border-b border-neutral-800">
+              <div className="flex items-center gap-2">
+                <Image src="/logo-white.png" alt="MR AI" width={20} height={20} />
+                <span className="font-bold text-sm">MR AI Suhbatlar</span>
+              </div>
+              <button
+                onClick={() => setMobileSidebar(false)}
+                className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition"
+              >
+                <X className="w-4 h-4" />
               </button>
             </div>
+
             <div className="p-3">
               <button
                 onClick={createNewChat}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-neutral-800 bg-neutral-950 text-sm font-semibold text-neutral-100 hover:bg-neutral-800 transition cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-xl border border-neutral-800 bg-neutral-950 text-xs font-semibold text-neutral-100 hover:bg-neutral-800 transition cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 Yangi suhbat
               </button>
             </div>
+
             <div className="flex-1 overflow-y-auto px-2 space-y-0.5">
               {chats.map((chat) => (
-                <button
+                <div
                   key={chat.id}
                   onClick={() => {
                     setCurrentChatId(chat.id);
                     setMobileSidebar(false);
                   }}
-                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-left ${
-                    currentChatId === chat.id ? "bg-neutral-800 text-white" : "text-neutral-400 hover:bg-neutral-800/50"
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs text-left transition cursor-pointer ${
+                    currentChatId === chat.id
+                      ? "bg-neutral-800 text-white font-medium border border-neutral-700"
+                      : "text-neutral-400 hover:bg-neutral-800/50"
                   }`}
                 >
-                  <MessageSquare className="w-4 h-4 opacity-60" />
-                  <span className="truncate">{chat.title}</span>
-                </button>
+                  <MessageSquare className="w-3.5 h-3.5 shrink-0 opacity-60" />
+                  <span className="truncate flex-1">{chat.title}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => deleteChat(chat.id, e)}
+                    title="O‘chirish"
+                    className="p-1 text-neutral-500 hover:text-red-400 transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               ))}
+            </div>
+
+            <div className="p-3 border-t border-neutral-800 space-y-1 bg-neutral-950/60">
+              <button
+                onClick={() => {
+                  setMobileSidebar(false);
+                  setSettingsOpen(true);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-neutral-300 hover:bg-neutral-800 transition cursor-pointer"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Sozlamalar (Settings)
+              </button>
+              <div className="flex items-center gap-2 px-3 py-1.5">
+                <div className="w-6 h-6 rounded-full bg-neutral-800 border border-neutral-700 text-white flex items-center justify-center text-[10px] font-bold uppercase shrink-0">
+                  {displayName.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold truncate text-neutral-200">{displayName}</p>
+                  <p className="text-[10px] text-neutral-500 truncate">@{displayUsername}</p>
+                </div>
+                <button
+                  onClick={signOut}
+                  title="Chiqish"
+                  className="p-1 text-neutral-400 hover:text-white"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main chat area */}
+      {/* Main Chat Area */}
       <div className={`flex-1 flex flex-col min-w-0 ${themeBg}`}>
-        {/* Top bar */}
-        <header className="h-14 border-b border-neutral-800 bg-neutral-950/80 backdrop-blur flex items-center justify-between px-4 shrink-0">
-          <div className="flex items-center gap-3">
+        {/* Top Header Navigation */}
+        <header className="h-14 border-b border-neutral-800/80 bg-neutral-950/80 backdrop-blur-md flex items-center justify-between px-3 sm:px-4 shrink-0 z-10">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={() => setMobileSidebar(true)}
-              className="md:hidden p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-300"
+              className="md:hidden p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-300 transition"
+              title="Menyu"
             >
               <Menu className="w-5 h-5" />
             </button>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="hidden md:flex p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-300 cursor-pointer"
+              className="hidden md:flex p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-300 transition cursor-pointer"
+              title={sidebarOpen ? "Yon panelni yopish" : "Yon panelni ochish"}
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-4 h-4" />
             </button>
             <div className="flex items-center gap-2">
-              <Image src="/logo-white.png" alt="MR AI" width={22} height={22} />
-              <span className="font-semibold text-sm text-neutral-100 tracking-tight">MR AI</span>
+              <Image src="/logo-white.png" alt="MR AI" width={22} height={22} className="shrink-0" />
+              <span className="font-bold text-sm text-neutral-100 tracking-tight">MR AI</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Center / Right controls */}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Quick New Chat Button (available on all devices) */}
+            <button
+              onClick={createNewChat}
+              title="Yangi suhbat"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg border border-neutral-800 hover:bg-neutral-800 text-neutral-300 hover:text-white transition text-xs font-medium flex items-center gap-1 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Yangi</span>
+            </button>
+
+            {/* Active Model Pill */}
             {defaultKey ? (
               <button
                 onClick={() => setSettingsOpen(true)}
-                className="flex items-center gap-2 text-xs text-neutral-300 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-full hover:border-neutral-700 transition cursor-pointer"
+                title="Modelni almashtirish uchun bosing"
+                className="flex items-center gap-1.5 text-xs text-neutral-300 bg-neutral-900 border border-neutral-800 px-2.5 py-1.5 rounded-full hover:border-neutral-700 transition cursor-pointer"
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="font-medium capitalize">{defaultKey.provider}</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="font-medium capitalize text-[11px] sm:text-xs">{defaultKey.provider}</span>
                 <span className="text-neutral-500">/</span>
-                <span className="text-neutral-400 truncate max-w-[150px]">{defaultKey.model}</span>
+                <span className="text-neutral-400 truncate max-w-[90px] sm:max-w-[140px] text-[11px] sm:text-xs">
+                  {defaultKey.model}
+                </span>
               </button>
             ) : (
               <button
                 onClick={() => setSettingsOpen(true)}
-                className="text-xs text-amber-300 bg-amber-950/60 border border-amber-900/60 px-3 py-1.5 rounded-full hover:bg-amber-900/60 transition cursor-pointer flex items-center gap-1.5"
+                className="text-xs text-amber-300 bg-amber-950/60 border border-amber-900/60 px-2.5 py-1.5 rounded-full hover:bg-amber-900/60 transition cursor-pointer flex items-center gap-1.5"
               >
-                <Key className="w-3.5 h-3.5" />
-                API Key qo‘shing
+                <Key className="w-3 h-3" />
+                <span className="text-[11px] sm:text-xs">API Key</span>
               </button>
             )}
 
+            {/* Settings Gear */}
             <button
               onClick={() => setSettingsOpen(true)}
               title="Sozlamalar"
@@ -721,7 +923,7 @@ export default function ChatApp() {
           </div>
         </header>
 
-        {/* Messages Container */}
+        {/* Messages Scroll Area */}
         <div
           ref={chatScrollContainerRef}
           onScroll={handleScroll}
@@ -729,18 +931,18 @@ export default function ChatApp() {
         >
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center px-4 max-w-2xl mx-auto py-12">
-              <div className="w-14 h-14 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center mb-4 shadow-sm">
-                <Image src="/logo-white.png" alt="MR AI" width={32} height={32} />
+              <div className="w-13 h-13 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center mb-4 shadow-sm">
+                <Image src="/logo-white.png" alt="MR AI" width={30} height={30} />
               </div>
-              <h2 className="text-xl font-bold text-neutral-100 mb-2 text-center">
+              <h2 className="text-lg sm:text-xl font-bold text-neutral-100 mb-1.5 text-center">
                 Qanday yordam bera olaman?
               </h2>
               <p className="text-xs text-neutral-400 text-center max-w-md mb-8 leading-relaxed">
-                MR AI orqali istalgan model (Claude, GPT-4o, DeepSeek R1, Groq) bilan xavfsiz va professional tarzda suhbatlashing.
+                Istalgan model (Claude, GPT-4o, DeepSeek R1, Groq) orqali professional va xavfsiz suhbatlashing.
               </p>
 
-              {/* Suggestions Grid (Claude Style) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+              {/* Suggestions Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full">
                 {suggestions.map((s, idx) => {
                   const Icon = s.icon;
                   return (
@@ -764,7 +966,7 @@ export default function ChatApp() {
               </div>
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+            <div className="max-w-3xl mx-auto px-3.5 sm:px-6 py-6 space-y-6">
               {messages.map((msg, index) => {
                 const isAssistant = msg.role === "assistant";
                 const isLastAssistant =
@@ -779,16 +981,16 @@ export default function ChatApp() {
                     className={`flex gap-3 group ${!isAssistant ? "justify-end" : ""}`}
                   >
                     {isAssistant && (
-                      <div className="w-8 h-8 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center shrink-0 mt-0.5">
-                        <Image src="/logo-white.png" alt="" width={18} height={18} />
+                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                        <Image src="/logo-white.png" alt="" width={16} height={16} />
                       </div>
                     )}
 
                     <div
-                      className={`max-w-[85%] rounded-2xl ${
+                      className={`max-w-[88%] sm:max-w-[82%] rounded-2xl ${
                         !isAssistant
-                          ? `bg-neutral-800 border border-neutral-700/60 text-white px-4 py-2.5 ${fontSizeClass}`
-                          : "bg-transparent text-neutral-200"
+                          ? `bg-neutral-800/90 border border-neutral-700/60 text-white px-4 py-2.5 ${fontSizeClass}`
+                          : "bg-transparent text-neutral-200 min-w-0"
                       }`}
                     >
                       {isAssistant ? (
@@ -797,7 +999,7 @@ export default function ChatApp() {
                           <div className="p-4 rounded-xl border border-red-900/60 bg-red-950/40 text-red-300 text-sm space-y-3">
                             <div className="flex items-start gap-2.5">
                               <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                              <span className="leading-relaxed font-medium">
+                              <span className="leading-relaxed font-medium text-xs sm:text-sm">
                                 {msg.content.replace(/^Xatolik:\s*/, "")}
                               </span>
                             </div>
@@ -813,52 +1015,34 @@ export default function ChatApp() {
                           <div className="space-y-2">
                             {thinking && <ThinkingBlock thinking={thinking} />}
 
-                            <div className="prose prose-invert prose-sm max-w-none leading-relaxed prose-p:my-2 prose-headings:text-neutral-100 prose-a:text-blue-400 prose-ul:my-2 prose-ol:my-2">
+                            <div className="markdown-content">
                               <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
-                                components={{
-                                  code({ inline, className, children, ...props }: any) {
-                                    const match = /language-(\w+)/.exec(className || "");
-                                    const codeValue = String(children).replace(/\n$/, "");
-                                    if (!inline && (match || codeValue.includes("\n"))) {
-                                      return (
-                                        <CodeBlock
-                                          language={match ? match[1] : undefined}
-                                          value={codeValue}
-                                        />
-                                      );
-                                    }
-                                    return (
-                                      <code
-                                        className="bg-neutral-800 text-neutral-200 px-1.5 py-0.5 rounded text-[12px] font-mono"
-                                        {...props}
-                                      >
-                                        {children}
-                                      </code>
-                                    );
-                                  },
-                                }}
+                                components={markdownComponents}
                               >
                                 {content || (isStreaming && isLastAssistant ? "..." : "")}
                               </ReactMarkdown>
                             </div>
 
-                            {/* Message Actions Bar (Claude style) */}
+                            {/* Message Actions Bar (Claude Style) */}
                             {content && !isStreaming && (
-                              <div className="flex items-center gap-1 pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex items-center gap-1 pt-1.5 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                 <button
                                   type="button"
                                   onClick={() => copyResponse(msg.id, msg.content)}
-                                  className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition cursor-pointer flex items-center gap-1 text-[11px]"
+                                  className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/80 transition cursor-pointer flex items-center gap-1 text-[11px]"
                                   title="Javobni nusxalash"
                                 >
                                   {copiedMessageId === msg.id ? (
                                     <>
                                       <Check className="w-3.5 h-3.5 text-emerald-400" />
-                                      <span className="text-emerald-400">Nusxalandi</span>
+                                      <span className="text-emerald-400 font-medium">Nusxalandi</span>
                                     </>
                                   ) : (
-                                    <Copy className="w-3.5 h-3.5" />
+                                    <>
+                                      <Copy className="w-3.5 h-3.5" />
+                                      <span className="hidden sm:inline">Nusxalash</span>
+                                    </>
                                   )}
                                 </button>
 
@@ -866,11 +1050,11 @@ export default function ChatApp() {
                                   <button
                                     type="button"
                                     onClick={regenerateResponse}
-                                    className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition cursor-pointer flex items-center gap-1 text-[11px]"
+                                    className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800/80 transition cursor-pointer flex items-center gap-1 text-[11px]"
                                     title="Qayta urinish (Regenerate)"
                                   >
                                     <RotateCcw className="w-3.5 h-3.5" />
-                                    <span>Qayta urinish</span>
+                                    <span className="hidden sm:inline">Qayta urinish</span>
                                   </button>
                                 )}
                               </div>
@@ -879,8 +1063,8 @@ export default function ChatApp() {
                         )
                       ) : (
                         <div className="space-y-1">
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
-                          <div className="flex justify-end pt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                          <div className="flex justify-end pt-1 opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button
                               type="button"
                               onClick={() => editUserMessage(msg.content)}
@@ -904,7 +1088,8 @@ export default function ChatApp() {
           {isScrolledUp && (
             <button
               onClick={scrollToBottom}
-              className="fixed bottom-24 right-8 z-30 p-2 rounded-full bg-neutral-900 border border-neutral-700 text-neutral-300 hover:text-white shadow-lg transition cursor-pointer flex items-center gap-1"
+              className="fixed bottom-24 right-4 sm:right-8 z-30 p-2.5 rounded-full bg-neutral-900 border border-neutral-700 text-neutral-300 hover:text-white shadow-xl transition cursor-pointer flex items-center justify-center"
+              title="Pastga tushish"
             >
               <ArrowDown className="w-4 h-4" />
             </button>
@@ -912,9 +1097,9 @@ export default function ChatApp() {
         </div>
 
         {/* Input Area */}
-        <div className="border-t border-neutral-800 bg-neutral-950 px-4 py-3 shrink-0">
+        <div className="border-t border-neutral-800/80 bg-neutral-950 px-3 sm:px-4 py-2.5 sm:py-3 shrink-0">
           <div className="max-w-3xl mx-auto">
-            <div className="relative flex items-end gap-2 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-md focus-within:border-neutral-600 transition">
+            <div className="relative flex items-end gap-2 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-lg focus-within:border-neutral-600 focus-within:ring-1 focus-within:ring-neutral-600 transition">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -925,7 +1110,7 @@ export default function ChatApp() {
                 onKeyDown={handleKeyDown}
                 placeholder="Xabar yozing (Shift+Enter yangi qator)..."
                 rows={1}
-                className={`flex-1 resize-none bg-transparent px-4 py-3 ${fontSizeClass} text-neutral-100 placeholder:text-neutral-500 max-h-[220px] focus:outline-none`}
+                className={`flex-1 resize-none bg-transparent px-3.5 sm:px-4 py-3 ${fontSizeClass} text-neutral-100 placeholder:text-neutral-500 max-h-[220px] focus:outline-none`}
                 disabled={isStreaming}
               />
               <div className="pr-2 pb-2">
@@ -942,14 +1127,14 @@ export default function ChatApp() {
                     onClick={() => sendMessage()}
                     disabled={!input.trim()}
                     title="Yuborish"
-                    className="w-9 h-9 rounded-xl bg-white text-neutral-950 flex items-center justify-center hover:bg-neutral-200 transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                    className="w-9 h-9 rounded-xl bg-white text-neutral-950 flex items-center justify-center hover:bg-neutral-200 transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-sm"
                   >
                     <Send className="w-4 h-4" />
                   </button>
                 )}
               </div>
             </div>
-            <p className="text-center text-[11px] text-neutral-500 mt-2 font-mono">
+            <p className="text-center text-[10px] sm:text-[11px] text-neutral-500 mt-2 font-mono">
               MR AI Pro · Algoritmik Intellektual Platforma
             </p>
           </div>
