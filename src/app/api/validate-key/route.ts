@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
 
     if (!apiKey || typeof apiKey !== "string" || !apiKey.trim()) {
       return NextResponse.json(
-        { valid: false, error: "API key kiritilmadi" },
+        { valid: false, error: "API kalit kiritilmadi" },
         { status: 400 }
       );
     }
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     const key = apiKey.trim();
     const cleanModel = (model || "").trim();
 
-    // Provider bo'yicha maxsus tekshiruvlar (masalan, Anthropic)
+    // 1. Anthropic uchun maxsus tekshiruv
     if (provider === "anthropic") {
       try {
         const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -46,51 +46,103 @@ export async function POST(req: NextRequest) {
           message = "Anthropic API kaliti noto‘g‘ri (401 Unauthorized)";
         }
 
-        return NextResponse.json({ valid: false, error: message }, { status: 200 });
+        return NextResponse.json({ valid: false, error: message });
       } catch (err: any) {
-        return NextResponse.json(
-          { valid: false, error: `Anthropic serveriga ulanib bo‘lmadi: ${err.message}` },
-          { status: 200 }
-        );
+        return NextResponse.json({
+          valid: false,
+          error: `Anthropic serveriga ulanib bo‘lmadi: ${err.message}`,
+        });
       }
     }
 
-    // Barcha OpenAI-mos keluvchi provayderlar uchun
+    // 2. Barcha OpenAI-mos provayderlar
     let targetBase = baseUrl ? baseUrl.trim().replace(/\/+$/, "") : "";
     if (!targetBase) {
       targetBase = getDefaultUrl(provider);
     }
 
-    const endpoint = targetBase.endsWith("/chat/completions")
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    };
+    if (provider === "openrouter") {
+      headers["HTTP-Referer"] = "https://mrai-uzbek.vercel.app";
+      headers["X-Title"] = "MR AI Pro";
+    }
+
+    // Qadam 1: Avval /models orqali kalitning o'zini tekshirish
+    // Bu usul model eskirib qolgan bo'lsa ham kalit to'g'riligini 100% aniqlaydi va faol modellarni qaytaradi
+    const modelsEndpoint = targetBase.endsWith("/models")
+      ? targetBase
+      : `${targetBase}/models`;
+
+    try {
+      const modelsController = new AbortController();
+      const modelsTimeout = setTimeout(() => modelsController.abort(), 7000);
+
+      const modelsRes = await fetch(modelsEndpoint, {
+        method: "GET",
+        headers,
+        signal: modelsController.signal,
+      });
+      clearTimeout(modelsTimeout);
+
+      if (modelsRes.status === 200) {
+        let fetchedModels: string[] = [];
+        try {
+          const modelsData = await modelsRes.json();
+          if (Array.isArray(modelsData?.data)) {
+            fetchedModels = modelsData.data
+              .map((m: any) => (typeof m === "string" ? m : m?.id))
+              .filter(Boolean);
+          }
+        } catch {}
+
+        return NextResponse.json({
+          valid: true,
+          models: fetchedModels.length > 0 ? fetchedModels : undefined,
+          message: "API kalit muvaffaqiyatli tasdiqlandi!",
+        });
+      }
+
+      if (modelsRes.status === 401) {
+        return NextResponse.json({
+          valid: false,
+          error: "API kalit noto‘g‘ri yoki yaroqsiz (401 Invalid API Key). Kalitni qayta tekshirib nusxalang.",
+        });
+      }
+
+      if (modelsRes.status === 403) {
+        return NextResponse.json({
+          valid: false,
+          error: "Ushbu API kalitga ruxsat yo‘q (403 Forbidden).",
+        });
+      }
+    } catch {
+      // /models ishlamasa yoki timeout bo'lsa chat/completions orqali davom etamiz
+    }
+
+    // Qadam 2: /chat/completions orqali test qilish
+    const chatEndpoint = targetBase.endsWith("/chat/completions")
       ? targetBase
       : `${targetBase}/chat/completions`;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const chatController = new AbortController();
+    const chatTimeout = setTimeout(() => chatController.abort(), 10000);
 
     try {
-      const res = await fetch(endpoint, {
+      const res = await fetch(chatEndpoint, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${key}`,
-          "Content-Type": "application/json",
-          // OpenRouter uchun qo'shimcha headerlar
-          ...(provider === "openrouter"
-            ? {
-                "HTTP-Referer": "https://mrai-uzbek.vercel.app",
-                "X-Title": "MR AI",
-              }
-            : {}),
-        },
+        headers,
         body: JSON.stringify({
-          model: cleanModel,
+          model: cleanModel || getDefaultModel(provider),
           messages: [{ role: "user", content: "hi" }],
           max_tokens: 1,
         }),
-        signal: controller.signal,
+        signal: chatController.signal,
       });
 
-      clearTimeout(timeout);
+      clearTimeout(chatTimeout);
 
       if (res.ok) {
         return NextResponse.json({ valid: true });
@@ -108,11 +160,11 @@ export async function POST(req: NextRequest) {
       } catch {}
 
       if (res.status === 401) {
-        errorMsg = "API kalit noto‘g‘ri yoki yaroqsiz (401 Invalid API Key). Iltimos, kalitni to‘g‘ri nusxalang.";
+        errorMsg = "API kalit noto‘g‘ri yoki yaroqsiz (401 Invalid API Key). Kalitni tekshiring.";
       } else if (res.status === 403) {
-        errorMsg = "Ushbu API kalitga ruxsat berilmagan (403 Forbidden).";
+        errorMsg = "Ushbu API kalitga ruxsat yo‘q (403 Forbidden).";
       } else if (res.status === 404) {
-        errorMsg = `Model (${cleanModel}) yoki API manzili topilmadi (404). Model nomini tekshiring.`;
+        errorMsg = `Model (${cleanModel}) provayderda mavjud emas yoki eskirgan (404). Boshqa modelni tanlang.`;
       } else if (res.status === 429) {
         if (errorMsg.toLowerCase().includes("quota") || errorMsg.toLowerCase().includes("credit")) {
           errorMsg = "Hisobingizda mablag‘ yoki bepul limit tugagan (Quota exceeded).";
@@ -121,19 +173,19 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({ valid: false, error: errorMsg }, { status: 200 });
+      return NextResponse.json({ valid: false, error: errorMsg });
     } catch (err: any) {
-      clearTimeout(timeout);
+      clearTimeout(chatTimeout);
       if (err.name === "AbortError") {
-        return NextResponse.json(
-          { valid: false, error: "Provayder serveri javob bermadi (Vaqt tugadi - Timeout)" },
-          { status: 200 }
-        );
+        return NextResponse.json({
+          valid: false,
+          error: "Provayder serveri javob bermadi (Vaqt tugadi - Timeout)",
+        });
       }
-      return NextResponse.json(
-        { valid: false, error: `Ulanishda xatolik: ${err.message}` },
-        { status: 200 }
-      );
+      return NextResponse.json({
+        valid: false,
+        error: `Ulanishda xatolik: ${err.message}`,
+      });
     }
   } catch (err: any) {
     return NextResponse.json(
@@ -165,5 +217,24 @@ function getDefaultUrl(provider: string): string {
       return "https://api.perplexity.ai";
     default:
       return "https://api.openai.com/v1";
+  }
+}
+
+function getDefaultModel(provider: string): string {
+  switch (provider) {
+    case "groq":
+      return "openai/gpt-oss-120b";
+    case "deepseek":
+      return "deepseek-chat";
+    case "openai":
+      return "gpt-4o-mini";
+    case "gemini":
+      return "gemini-1.5-flash";
+    case "openrouter":
+      return "meta-llama/llama-3.3-70b-instruct";
+    case "anthropic":
+      return "claude-3-5-sonnet-20241022";
+    default:
+      return "gpt-4o-mini";
   }
 }

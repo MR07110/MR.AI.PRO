@@ -50,12 +50,15 @@ export const PROVIDERS: ProviderOption[] = [
     value: "groq",
     label: "Groq (Ultra tez, bepul limitlar)",
     placeholder: "gsk_...",
-    defaultModel: "llama-3.3-70b-versatile",
+    defaultModel: "openai/gpt-oss-120b",
     defaultBaseUrl: "https://api.groq.com/openai/v1",
     models: [
-      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Tavsiya etiladi)" },
-      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant (Ultra tez)" },
-      { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill 70B (Mantiq)" },
+      { id: "openai/gpt-oss-120b", name: "GPT OSS 120B (Groq rasmiy tavsiya - Yangi)" },
+      { id: "openai/gpt-oss-20b", name: "GPT OSS 20B (Ultra tezkor)" },
+      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant" },
+      { id: "qwen/qwen3.8-27b", name: "Qwen 3.8 27B (Mantiq va kod)" },
+      { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill 70B" },
+      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Tier 2/Pullik)" },
       { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B (32k kontekst)" },
       { id: "gemma2-9b-it", name: "Google Gemma 2 9B" },
     ],
@@ -203,7 +206,8 @@ export default function SettingsModal({ open, onClose }: Props) {
   const [provider, setProvider] = useState<Provider>("groq");
   const [name, setName] = useState("");
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState("llama-3.3-70b-versatile");
+  const [model, setModel] = useState("openai/gpt-oss-120b");
+  const [discoveredModels, setDiscoveredModels] = useState<string[]>([]);
   const [isCustomModel, setIsCustomModel] = useState(false);
   const [customModelName, setCustomModelName] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://api.groq.com/openai/v1");
@@ -270,6 +274,7 @@ export default function SettingsModal({ open, onClose }: Props) {
   function onProviderChange(p: Provider) {
     setProvider(p);
     setError("");
+    setDiscoveredModels([]);
     const found = PROVIDERS.find((x) => x.value === p);
     if (found) {
       setIsCustomModel(found.models.length === 0);
@@ -305,6 +310,65 @@ export default function SettingsModal({ open, onClose }: Props) {
     setTestingKeyId(null);
   }
 
+  async function saveKeyDirectly() {
+    const trimmedKey = apiKey.trim();
+    const finalModel = isCustomModel ? customModelName.trim() : model.trim();
+
+    if (!trimmedKey) {
+      setError("Iltimos, API kalitni kiriting");
+      return;
+    }
+    if (!finalModel) {
+      setError("Iltimos, modelni tanlang yoki nomini kiriting");
+      return;
+    }
+
+    setSaving(true);
+    setStatusMessage("Kalit saqlanmoqda...");
+    setError("");
+
+    try {
+      const supabase = await getSupabaseBrowserClient();
+      const shouldBeDefault = isDefault || keys.length === 0;
+
+      if (shouldBeDefault) {
+        await supabase
+          .from("user_api_keys")
+          .update({ is_default: false })
+          .eq("user_id", user?.id);
+      }
+
+      const { error: insertError } = await supabase.from("user_api_keys").insert({
+        user_id: user?.id,
+        provider,
+        name: name.trim() || `${currentProvider.label.split(" ")[0]} (${finalModel})`,
+        api_key: trimmedKey,
+        model: finalModel,
+        base_url: baseUrl.trim() || null,
+        is_default: shouldBeDefault,
+      });
+
+      if (insertError) {
+        setError(insertError.message);
+        setSaving(false);
+        setStatusMessage("");
+        return;
+      }
+
+      setName("");
+      setApiKey("");
+      setIsDefault(false);
+      setShowForm(false);
+      setSaving(false);
+      setStatusMessage("");
+      loadKeys();
+    } catch (err: any) {
+      setError("Saqlashda xatolik: " + err.message);
+      setSaving(false);
+      setStatusMessage("");
+    }
+  }
+
   async function handleSaveKey() {
     setError("");
     const trimmedKey = apiKey.trim();
@@ -336,8 +400,12 @@ export default function SettingsModal({ open, onClose }: Props) {
 
       const validateData = await validateRes.json();
 
+      if (Array.isArray(validateData?.models) && validateData.models.length > 0) {
+        setDiscoveredModels(validateData.models);
+      }
+
       if (!validateData.valid) {
-        setError(validateData.error || "API kalit yaroqsiz! Saqlanmadi.");
+        setError(validateData.error || "API kalit yaroqsiz!");
         setSaving(false);
         setStatusMessage("");
         return;
@@ -349,42 +417,7 @@ export default function SettingsModal({ open, onClose }: Props) {
       return;
     }
 
-    setStatusMessage("Kalit to‘g‘ri! Saqlanmoqda...");
-    const supabase = await getSupabaseBrowserClient();
-
-    const shouldBeDefault = isDefault || keys.length === 0;
-
-    if (shouldBeDefault) {
-      await supabase
-        .from("user_api_keys")
-        .update({ is_default: false })
-        .eq("user_id", user?.id);
-    }
-
-    const { error: insertError } = await supabase.from("user_api_keys").insert({
-      user_id: user?.id,
-      provider,
-      name: name.trim() || `${currentProvider.label.split(" ")[0]} (${finalModel})`,
-      api_key: trimmedKey,
-      model: finalModel,
-      base_url: baseUrl.trim() || null,
-      is_default: shouldBeDefault,
-    });
-
-    if (insertError) {
-      setError(insertError.message);
-      setSaving(false);
-      setStatusMessage("");
-      return;
-    }
-
-    setName("");
-    setApiKey("");
-    setIsDefault(false);
-    setShowForm(false);
-    setSaving(false);
-    setStatusMessage("");
-    loadKeys();
+    await saveKeyDirectly();
   }
 
   async function setAsDefault(id: string) {
@@ -758,48 +791,56 @@ export default function SettingsModal({ open, onClose }: Props) {
                     <label className="block text-xs font-semibold text-neutral-300 mb-1.5 uppercase tracking-wide">
                       3. Model tanlash (Dropdown) *
                     </label>
-                    {currentProvider.models.length > 0 ? (
-                      <div className="space-y-2">
-                        <select
-                          value={isCustomModel ? "__custom__" : model}
-                          onChange={(e) => {
-                            if (e.target.value === "__custom__") {
-                              setIsCustomModel(true);
-                              setCustomModelName("");
-                            } else {
-                              setIsCustomModel(false);
-                              setModel(e.target.value);
-                            }
-                          }}
-                          className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 text-sm focus:border-neutral-600 focus:outline-none cursor-pointer"
-                        >
-                          {currentProvider.models.map((m) => (
-                            <option key={m.id} value={m.id} className="bg-neutral-900 text-neutral-100">
-                              {m.name}
+                    {(() => {
+                      const combinedModels = [
+                        ...currentProvider.models,
+                        ...discoveredModels
+                          .filter((id) => !currentProvider.models.some((m) => m.id === id))
+                          .map((id) => ({ id, name: `${id} (Hisobingizdagi faol)` })),
+                      ];
+                      return combinedModels.length > 0 ? (
+                        <div className="space-y-2">
+                          <select
+                            value={isCustomModel ? "__custom__" : model}
+                            onChange={(e) => {
+                              if (e.target.value === "__custom__") {
+                                setIsCustomModel(true);
+                                setCustomModelName("");
+                              } else {
+                                setIsCustomModel(false);
+                                setModel(e.target.value);
+                              }
+                            }}
+                            className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 text-sm focus:border-neutral-600 focus:outline-none cursor-pointer"
+                          >
+                            {combinedModels.map((m) => (
+                              <option key={m.id} value={m.id} className="bg-neutral-900 text-neutral-100">
+                                {m.name}
+                              </option>
+                            ))}
+                            <option value="__custom__" className="bg-neutral-900 text-neutral-100">
+                              + Boshqa model (Nomini qo‘lda yozish)...
                             </option>
-                          ))}
-                          <option value="__custom__" className="bg-neutral-900 text-neutral-100">
-                            + Boshqa model (Nomini qo‘lda yozish)...
-                          </option>
-                        </select>
+                          </select>
 
-                        {isCustomModel && (
-                          <input
-                            value={customModelName}
-                            onChange={(e) => setCustomModelName(e.target.value)}
-                            placeholder="Aniq model nomini kiriting (masalan: gpt-4o)"
-                            className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
-                          />
-                        )}
-                      </div>
-                    ) : (
-                      <input
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
-                        placeholder="Model nomini kiriting (masalan: gpt-4o)"
-                        className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
-                      />
-                    )}
+                          {isCustomModel && (
+                            <input
+                              value={customModelName}
+                              onChange={(e) => setCustomModelName(e.target.value)}
+                              placeholder="Aniq model nomini kiriting (masalan: gpt-4o)"
+                              className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                            />
+                          )}
+                        </div>
+                      ) : (
+                        <input
+                          value={model}
+                          onChange={(e) => setModel(e.target.value)}
+                          placeholder="Model nomini kiriting (masalan: gpt-4o)"
+                          className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                        />
+                      );
+                    })()}
                   </div>
 
                   <div>
@@ -846,9 +887,19 @@ export default function SettingsModal({ open, onClose }: Props) {
                   )}
 
                   {error && (
-                    <div className="flex items-start gap-2 text-xs text-red-400 bg-red-950/60 border border-red-900/60 px-3.5 py-2.5 rounded-lg">
-                      <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                      <span>{error}</span>
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-2 text-xs text-red-400 bg-red-950/60 border border-red-900/60 px-3.5 py-2.5 rounded-lg">
+                        <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span className="flex-1">{error}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={saveKeyDirectly}
+                        disabled={saving}
+                        className="w-full py-2 px-3 rounded-lg border border-neutral-700 bg-neutral-900 text-neutral-200 hover:text-white hover:bg-neutral-800 text-xs font-medium transition cursor-pointer flex items-center justify-center gap-1.5"
+                      >
+                        Tekshiruvsiz baribir saqlash (Force Save)
+                      </button>
                     </div>
                   )}
 
