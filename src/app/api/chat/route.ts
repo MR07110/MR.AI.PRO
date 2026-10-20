@@ -89,11 +89,35 @@ export async function POST(req: NextRequest) {
       stream,
     };
 
-    const res = await fetch(endpoint, {
+    let res = await fetch(endpoint, {
       method: "POST",
       headers,
       body: JSON.stringify(bodyPayload),
     });
+
+    // Auto-fallback on 404 for Groq if requested model is unavailable/deprecated
+    if (res.status === 404 && provider === "groq") {
+      const groqCandidates = [
+        "llama-3.1-8b-instant",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "mixtral-8x7b-32768",
+        "llama-3.3-70b-versatile",
+      ];
+      for (const fallbackModel of groqCandidates) {
+        if (fallbackModel !== cleanModel) {
+          const fallbackRes = await fetch(endpoint, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ ...bodyPayload, model: fallbackModel }),
+          });
+          if (fallbackRes.ok) {
+            res = fallbackRes;
+            break;
+          }
+        }
+      }
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -380,28 +404,13 @@ function getDefaultUrl(provider: string): string {
 
 function sanitizeModel(provider: string, model?: string): string {
   const m = (model || "").trim();
-  if (provider === "groq") {
-    // If empty or user had old invalid model like openai/gpt-oss-120b
-    if (!m || m.includes("gpt-oss") || m.includes("qwen3.8") || m.startsWith("openai/")) {
-      return "llama-3.3-70b-versatile";
-    }
-    return m;
-  }
-  if (provider === "gemini") {
-    if (!m) return "gemini-2.0-flash";
-    return m;
-  }
-  if (provider === "openrouter") {
-    if (!m) return "meta-llama/llama-3.3-70b-instruct:free";
-    return m;
-  }
-  if (provider === "anthropic") {
-    if (!m) return "claude-3-5-sonnet-20241022";
-    return m;
-  }
-  if (provider === "deepseek") {
-    if (!m) return "deepseek-chat";
-    return m;
-  }
-  return m || "gpt-4o-mini";
+  // Always respect user's requested model if provided
+  if (m) return m;
+
+  if (provider === "groq") return "llama-3.1-8b-instant";
+  if (provider === "gemini") return "gemini-2.0-flash";
+  if (provider === "openrouter") return "meta-llama/llama-3.3-70b-instruct:free";
+  if (provider === "anthropic") return "claude-3-5-sonnet-20241022";
+  if (provider === "deepseek") return "deepseek-chat";
+  return "gpt-4o-mini";
 }

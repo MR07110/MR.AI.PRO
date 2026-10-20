@@ -132,11 +132,8 @@ export async function POST(req: NextRequest) {
 
     try {
       let testModel = cleanModel || getDefaultModel(provider);
-      if (provider === "groq" && (testModel.includes("gpt-oss") || testModel.includes("qwen3.8") || testModel.startsWith("openai/"))) {
-        testModel = "llama-3.3-70b-versatile";
-      }
 
-      const res = await fetch(chatEndpoint, {
+      let res = await fetch(chatEndpoint, {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -146,6 +143,20 @@ export async function POST(req: NextRequest) {
         }),
         signal: chatController.signal,
       });
+
+      // If 404 on Groq, attempt fallback to llama-3.1-8b-instant
+      if (res.status === 404 && provider === "groq") {
+        res = await fetch(chatEndpoint, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: "llama-3.1-8b-instant",
+            messages: [{ role: "user", content: "hi" }],
+            max_tokens: 1,
+          }),
+          signal: chatController.signal,
+        });
+      }
 
       clearTimeout(chatTimeout);
 
