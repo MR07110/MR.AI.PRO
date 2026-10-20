@@ -144,52 +144,41 @@ input:focus, textarea:focus, button:focus-visible, select:focus {
   color: #737373;
 }
 
-/* Tables */
+/* Tables - Modern Claude / ChatGPT Sleek Style */
 .markdown-content table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 1rem;
-  margin-bottom: 1rem;
+  margin: 0 !important;
   font-size: 0.875rem;
-  border-radius: 0.75rem;
-  overflow: hidden;
-  border: 1px solid #262626;
+  border: none !important;
 }
 
 .markdown-content thead {
-  background-color: #171717;
+  background-color: rgba(255, 255, 255, 0.04);
   border-bottom: 1px solid #262626;
 }
 
 .markdown-content th {
-  padding: 0.65rem 1rem;
+  padding: 0.75rem 1rem;
   text-align: left;
   font-weight: 600;
   font-size: 0.8125rem;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: #f5f5f5;
-  border-right: 1px solid #262626;
-}
-.markdown-content th:last-child {
-  border-right: none;
+  letter-spacing: 0.04em;
+  color: #e5e5e5;
+  border: none !important;
 }
 
 .markdown-content td {
-  padding: 0.65rem 1rem;
-  border-top: 1px solid #262626;
-  border-right: 1px solid #262626;
+  padding: 0.75rem 1rem;
+  border: none !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
   color: #d4d4d4;
-}
-.markdown-content td:last-child {
-  border-right: none;
+  line-height: 1.6;
 }
 
-.markdown-content tr:nth-child(even) {
+.markdown-content tr:hover td {
   background-color: rgba(255, 255, 255, 0.02);
-}
-.markdown-content tr:hover {
-  background-color: rgba(255, 255, 255, 0.04);
 }
 
 /* Blockquotes */

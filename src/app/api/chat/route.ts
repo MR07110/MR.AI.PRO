@@ -31,7 +31,8 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanKey = apiKey.trim();
-    const cleanModel = (model || "").trim();
+    const cleanModel = sanitizeModel(provider, model);
+    const finalMaxTokens = Math.min(Math.max(1, Number(maxTokens) || 4096), 8192);
     const cleanSystem =
       systemPrompt ||
       "Siz MR AI — professional va intellektual AI yordamchisiz. Javoblaringiz aniq, faktik to‘g‘ri, batafsil va doimo chiroyli Markdown formatida bo‘lsin. Barcha dasturlash kodlarini har doim Markdown kod bloklarida tegishli til ko‘rsatilgan holda (masalan: ```python ... ``` yoki ```typescript ... ```) yozing. Jadvallarni har doim to‘liq Markdown jadval sintaksisida (| ustun1 | ustun2 |) formatlang. Matematik formulalar uchun LaTeX ($...$) ishlating. Suhbat qaysi tilda olib borilsa, o‘sha tilda javob bering.";
@@ -41,10 +42,10 @@ export async function POST(req: NextRequest) {
       return handleAnthropic({
         messages,
         apiKey: cleanKey,
-        model: cleanModel || "claude-3-5-sonnet-20241022",
+        model: cleanModel,
         systemPrompt: cleanSystem,
         temperature,
-        maxTokens,
+        maxTokens: finalMaxTokens,
         stream,
       });
     }
@@ -83,8 +84,8 @@ export async function POST(req: NextRequest) {
     const bodyPayload: Record<string, any> = {
       model: cleanModel,
       messages: apiMessages,
-      temperature,
-      max_tokens: maxTokens,
+      temperature: Math.min(Math.max(0, Number(temperature) || 0.7), 2),
+      max_tokens: finalMaxTokens,
       stream,
     };
 
@@ -143,6 +144,25 @@ export async function POST(req: NextRequest) {
           while (true) {
             const { done, value } = await reader.read();
             if (done) {
+              if (buffer.trim()) {
+                const remainingLines = buffer.split("\n");
+                for (const line of remainingLines) {
+                  const trimmed = line.trim();
+                  if (!trimmed || !trimmed.startsWith("data: ")) continue;
+                  const dataStr = trimmed.slice(6).trim();
+                  if (dataStr === "[DONE]") break;
+                  try {
+                    const parsed = JSON.parse(dataStr);
+                    const delta = parsed.choices?.[0]?.delta;
+                    const text = delta?.content ?? delta?.text ?? "";
+                    if (text) {
+                      controller.enqueue(
+                        encoder.encode(`data: ${JSON.stringify({ content: text })}\n\n`)
+                      );
+                    }
+                  } catch {}
+                }
+              }
               if (insideReasoning) {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: "</think>\n\n" })}\n\n`));
               }
@@ -173,8 +193,9 @@ export async function POST(req: NextRequest) {
               try {
                 const parsed = JSON.parse(dataStr);
                 const delta = parsed.choices?.[0]?.delta;
-                const text = delta?.content || "";
-                const reasoning = delta?.reasoning_content || "";
+                const text = delta?.content ?? delta?.text ?? parsed.choices?.[0]?.text ?? "";
+                const reasoning =
+                  delta?.reasoning_content ?? delta?.reasoning ?? delta?.thought ?? "";
 
                 if (reasoning) {
                   if (!insideReasoning) {
@@ -355,4 +376,32 @@ function getDefaultUrl(provider: string): string {
     default:
       return "https://api.openai.com/v1";
   }
+}
+
+function sanitizeModel(provider: string, model?: string): string {
+  const m = (model || "").trim();
+  if (provider === "groq") {
+    // If empty or user had old invalid model like openai/gpt-oss-120b
+    if (!m || m.includes("gpt-oss") || m.includes("qwen3.8") || m.startsWith("openai/")) {
+      return "llama-3.3-70b-versatile";
+    }
+    return m;
+  }
+  if (provider === "gemini") {
+    if (!m) return "gemini-2.0-flash";
+    return m;
+  }
+  if (provider === "openrouter") {
+    if (!m) return "meta-llama/llama-3.3-70b-instruct:free";
+    return m;
+  }
+  if (provider === "anthropic") {
+    if (!m) return "claude-3-5-sonnet-20241022";
+    return m;
+  }
+  if (provider === "deepseek") {
+    if (!m) return "deepseek-chat";
+    return m;
+  }
+  return m || "gpt-4o-mini";
 }

@@ -131,11 +131,16 @@ export async function POST(req: NextRequest) {
     const chatTimeout = setTimeout(() => chatController.abort(), 10000);
 
     try {
+      let testModel = cleanModel || getDefaultModel(provider);
+      if (provider === "groq" && (testModel.includes("gpt-oss") || testModel.includes("qwen3.8") || testModel.startsWith("openai/"))) {
+        testModel = "llama-3.3-70b-versatile";
+      }
+
       const res = await fetch(chatEndpoint, {
         method: "POST",
         headers,
         body: JSON.stringify({
-          model: cleanModel || getDefaultModel(provider),
+          model: testModel,
           messages: [{ role: "user", content: "hi" }],
           max_tokens: 1,
         }),
@@ -223,15 +228,15 @@ function getDefaultUrl(provider: string): string {
 function getDefaultModel(provider: string): string {
   switch (provider) {
     case "groq":
-      return "openai/gpt-oss-120b";
+      return "llama-3.3-70b-versatile";
     case "deepseek":
       return "deepseek-chat";
     case "openai":
       return "gpt-4o-mini";
     case "gemini":
-      return "gemini-1.5-flash";
+      return "gemini-2.0-flash";
     case "openrouter":
-      return "meta-llama/llama-3.3-70b-instruct";
+      return "meta-llama/llama-3.3-70b-instruct:free";
     case "anthropic":
       return "claude-3-5-sonnet-20241022";
     default:

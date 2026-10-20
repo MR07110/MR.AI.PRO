@@ -61,19 +61,19 @@ export const PROVIDERS: ProviderOption[] = [
     value: "groq",
     label: "Groq (Ultra tez, bepul limitlar)",
     placeholder: "gsk_...",
-    defaultModel: "openai/gpt-oss-120b",
+    defaultModel: "llama-3.3-70b-versatile",
     defaultBaseUrl: "https://api.groq.com/openai/v1",
     hasFree: true,
     hasPaid: true,
     models: [
-      { id: "openai/gpt-oss-120b", name: "GPT OSS 120B (Yangi - Tavsiya)", isFree: true },
-      { id: "openai/gpt-oss-20b", name: "GPT OSS 20B (Ultra tezkor)", isFree: true },
-      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant", isFree: true },
-      { id: "qwen/qwen3.8-27b", name: "Qwen 3.8 27B (Mantiq va kod)", isFree: true },
-      { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill 70B", isFree: true },
+      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile (Tavsiya - Flagman)", isFree: true },
+      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant (Ultra tezkor)", isFree: true },
+      { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill 70B (Reasoning)", isFree: true },
       { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B (32k kontekst)", isFree: true },
       { id: "gemma2-9b-it", name: "Google Gemma 2 9B", isFree: true },
-      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Tier 2/Pullik)", isFree: false },
+      { id: "llama3-70b-8192", name: "Llama 3 70B (8k)", isFree: true },
+      { id: "llama3-8b-8192", name: "Llama 3 8B (8k)", isFree: true },
+      { id: "qwen-qwq-32b", name: "Qwen QwQ 32B (Reasoning)", isFree: false },
     ],
   },
   {
@@ -239,12 +239,12 @@ export function isModelFree(modelId: string): boolean {
   if (modelId.endsWith(":free")) return true;
   const lower = modelId.toLowerCase();
   if (
-    lower.includes("gpt-oss") ||
+    lower.includes("llama-3.3-70b-versatile") ||
     lower.includes("llama-3.1-8b") ||
-    lower.includes("qwen3.8") ||
     lower.includes("distill-llama") ||
     lower.includes("mixtral") ||
     lower.includes("gemma2") ||
+    lower.includes("llama3-") ||
     lower.includes("ollama") ||
     lower.includes("vllm") ||
     lower === "llama3" ||
@@ -348,6 +348,9 @@ export default function SettingsModal({ open, onClose }: Props) {
       .order("created_at", { ascending: false });
     setKeys(data || []);
     setLoading(false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("mr_ai_keys_updated"));
+    }
   }
 
   function onPricingTierChange(tier: "free" | "paid") {

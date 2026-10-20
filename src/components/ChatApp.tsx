@@ -78,7 +78,7 @@ function CodeBlock({ language, value }: { language?: string; value: string }) {
 }
 
 // Collapsible Thinking / Reasoning Block (Claude / DeepSeek style)
-function ThinkingBlock({ thinking }: { thinking: string }) {
+function ThinkingBlock({ thinking, isThinking }: { thinking: string; isThinking?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -89,13 +89,18 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
         className="w-full flex items-center justify-between px-3.5 py-2 text-neutral-400 hover:text-neutral-200 bg-neutral-900/70 transition cursor-pointer"
       >
         <div className="flex items-center gap-2">
-          <Brain className="w-3.5 h-3.5 text-neutral-400" />
+          <Brain className={`w-3.5 h-3.5 ${isThinking ? "text-purple-400 animate-pulse" : "text-neutral-400"}`} />
           <span className="font-medium text-neutral-300">Fikrlash jarayoni (Reasoning)</span>
+          {isThinking && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-800/50 font-mono">
+              Fikrlanmoqda...
+            </span>
+          )}
         </div>
         {open ? <ChevronUp className="w-3.5 h-3.5 text-neutral-500" /> : <ChevronDown className="w-3.5 h-3.5 text-neutral-500" />}
       </button>
       {open && (
-        <div className="p-3.5 border-t border-neutral-800/80 text-neutral-400 leading-relaxed font-mono whitespace-pre-wrap text-[12px] bg-neutral-950/40">
+        <div className="p-3.5 border-t border-neutral-800/80 text-neutral-400 leading-relaxed font-mono whitespace-pre-wrap text-[12px] bg-neutral-950/40 max-h-80 overflow-y-auto">
           {thinking}
         </div>
       )}
@@ -137,6 +142,7 @@ export default function ChatApp() {
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const skipNextLoadRef = useRef<string | null>(null);
 
   // Load chats + default key + settings
   useEffect(() => {
@@ -148,14 +154,29 @@ export default function ChatApp() {
     function onSettingsUpdate() {
       setAppSettings(loadSettings());
     }
+    function onKeysUpdate() {
+      loadDefaultKey();
+    }
+
     window.addEventListener("mr_ai_settings_updated", onSettingsUpdate);
-    return () => window.removeEventListener("mr_ai_settings_updated", onSettingsUpdate);
+    window.addEventListener("mr_ai_keys_updated", onKeysUpdate);
+    return () => {
+      window.removeEventListener("mr_ai_settings_updated", onSettingsUpdate);
+      window.removeEventListener("mr_ai_keys_updated", onKeysUpdate);
+    };
   }, [user]);
 
-  // Load messages when chat changes
+  // Load messages when chat changes (prevent race condition during inline chat creation)
   useEffect(() => {
-    if (currentChatId) loadMessages(currentChatId);
-    else setMessages([]);
+    if (skipNextLoadRef.current && skipNextLoadRef.current === currentChatId) {
+      skipNextLoadRef.current = null;
+      return;
+    }
+    if (currentChatId) {
+      loadMessages(currentChatId);
+    } else {
+      setMessages([]);
+    }
   }, [currentChatId]);
 
   // Handle scroll events to detect if user scrolled up
@@ -189,16 +210,35 @@ export default function ChatApp() {
     setChats(data || []);
   }
 
-  async function loadDefaultKey() {
-    if (!user) return;
+  async function loadDefaultKey(): Promise<UserApiKey | null> {
+    if (!user) return null;
     const supabase = await getSupabaseBrowserClient();
-    const { data } = await supabase
+    let { data } = await supabase
       .from("user_api_keys")
       .select("*")
       .eq("user_id", user.id)
       .eq("is_default", true)
       .maybeSingle();
-    setDefaultKey(data);
+
+    if (!data) {
+      const { data: anyKeys } = await supabase
+        .from("user_api_keys")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (anyKeys && anyKeys.length > 0) {
+        data = anyKeys[0];
+        await supabase
+          .from("user_api_keys")
+          .update({ is_default: true })
+          .eq("id", data.id);
+      }
+    }
+
+    setDefaultKey(data || null);
+    return data || null;
   }
 
   async function loadMessages(chatId: string) {
@@ -270,9 +310,14 @@ export default function ChatApp() {
   // Core Send Logic via Server API (/api/chat)
   async function executeChatStream(
     chatId: string,
-    history: Array<{ role: "user" | "assistant"; content: string }>
+    history: Array<{ role: "user" | "assistant"; content: string }>,
+    keyToUse?: UserApiKey | null
   ) {
-    if (!defaultKey) {
+    let key = keyToUse || defaultKey;
+    if (!key) {
+      key = await loadDefaultKey();
+    }
+    if (!key) {
       setSettingsOpen(true);
       return;
     }
@@ -302,10 +347,10 @@ export default function ChatApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           messages: history,
-          apiKey: defaultKey.api_key,
-          provider: defaultKey.provider,
-          model: defaultKey.model,
-          baseUrl: defaultKey.base_url || undefined,
+          apiKey: key.api_key,
+          provider: key.provider,
+          model: key.model,
+          baseUrl: key.base_url || undefined,
           systemPrompt: appSettings.systemPrompt || undefined,
           temperature: appSettings.temperature ?? 0.7,
           maxTokens: appSettings.maxTokens ?? 4096,
@@ -348,13 +393,26 @@ export default function ChatApp() {
 
             try {
               const parsed = JSON.parse(dataStr);
-              if (parsed.content) {
+              if (parsed.content !== undefined && parsed.content !== null) {
                 fullContent += parsed.content;
-                setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === tempAiId ? { ...m, content: fullContent } : m
-                  )
-                );
+                setMessages((prev) => {
+                  const exists = prev.some((m) => m.id === tempAiId);
+                  if (exists) {
+                    return prev.map((m) =>
+                      m.id === tempAiId ? { ...m, content: fullContent } : m
+                    );
+                  }
+                  return [
+                    ...prev,
+                    {
+                      id: tempAiId,
+                      chat_id: chatId,
+                      role: "assistant",
+                      content: fullContent,
+                      created_at: new Date().toISOString(),
+                    },
+                  ];
+                });
               }
             } catch {}
           }
@@ -362,32 +420,73 @@ export default function ChatApp() {
       } else {
         const data = await res.json();
         fullContent = data.content || "";
-        setMessages((prev) =>
-          prev.map((m) => (m.id === tempAiId ? { ...m, content: fullContent } : m))
-        );
+        setMessages((prev) => {
+          const exists = prev.some((m) => m.id === tempAiId);
+          if (exists) {
+            return prev.map((m) =>
+              m.id === tempAiId ? { ...m, content: fullContent } : m
+            );
+          }
+          return [
+            ...prev,
+            {
+              id: tempAiId,
+              chat_id: chatId,
+              role: "assistant",
+              content: fullContent,
+              created_at: new Date().toISOString(),
+            },
+          ];
+        });
       }
 
       // Save assistant message to Supabase
-      const supabase = await getSupabaseBrowserClient();
-      await supabase.from("messages").insert({
-        chat_id: chatId,
-        role: "assistant",
-        content: fullContent,
-      });
+      if (fullContent.trim()) {
+        const supabase = await getSupabaseBrowserClient();
+        await supabase.from("messages").insert({
+          chat_id: chatId,
+          role: "assistant",
+          content: fullContent,
+        });
 
-      // Update chat timestamp
-      await supabase
-        .from("chats")
-        .update({ updated_at: new Date().toISOString() })
-        .eq("id", chatId);
+        // Update chat timestamp
+        await supabase
+          .from("chats")
+          .update({ updated_at: new Date().toISOString() })
+          .eq("id", chatId);
+      }
     } catch (err: any) {
-      if (err.name !== "AbortError") {
+      if (err.name === "AbortError") {
+        if (fullContent.trim()) {
+          try {
+            const supabase = await getSupabaseBrowserClient();
+            await supabase.from("messages").insert({
+              chat_id: chatId,
+              role: "assistant",
+              content: fullContent,
+            });
+          } catch {}
+        }
+      } else {
         const errorContent = `Xatolik: ${err.message || "Noma’lum xato"}`;
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === tempAiId ? { ...m, content: errorContent } : m
-          )
-        );
+        setMessages((prev) => {
+          const exists = prev.some((m) => m.id === tempAiId);
+          if (exists) {
+            return prev.map((m) =>
+              m.id === tempAiId ? { ...m, content: errorContent } : m
+            );
+          }
+          return [
+            ...prev,
+            {
+              id: tempAiId,
+              chat_id: chatId,
+              role: "assistant",
+              content: errorContent,
+              created_at: new Date().toISOString(),
+            },
+          ];
+        });
       }
     } finally {
       setIsStreaming(false);
@@ -400,7 +499,11 @@ export default function ChatApp() {
     const textToSend = (promptOverride || input).trim();
     if (!textToSend || isStreaming || !user) return;
 
-    if (!defaultKey) {
+    let activeKey = defaultKey;
+    if (!activeKey) {
+      activeKey = await loadDefaultKey();
+    }
+    if (!activeKey) {
       setSettingsOpen(true);
       return;
     }
@@ -417,6 +520,7 @@ export default function ChatApp() {
         .single();
       if (!data) return;
       chatId = data.id;
+      skipNextLoadRef.current = chatId;
       setCurrentChatId(chatId);
       setChats((prev) => [data, ...prev]);
     }
@@ -457,12 +561,21 @@ export default function ChatApp() {
       { role: "user" as const, content: textToSend },
     ];
 
-    await executeChatStream(activeChatId, history);
+    await executeChatStream(activeChatId, history, activeKey);
   }
 
   // Regenerate last assistant response (Claude style)
   async function regenerateResponse() {
     if (isStreaming || !currentChatId || messages.length === 0) return;
+
+    let activeKey = defaultKey;
+    if (!activeKey) {
+      activeKey = await loadDefaultKey();
+    }
+    if (!activeKey) {
+      setSettingsOpen(true);
+      return;
+    }
 
     let lastUserIdx = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -490,7 +603,7 @@ export default function ChatApp() {
       content: m.content,
     }));
 
-    await executeChatStream(currentChatId, history);
+    await executeChatStream(currentChatId, history, activeKey);
   }
 
   function stopStreaming() {
@@ -570,34 +683,34 @@ export default function ChatApp() {
     },
   ];
 
-  // Markdown custom renderers
+  // Markdown custom renderers - Clean modern Claude style (No double scopes)
   const markdownComponents = {
     table({ children }: any) {
       return (
-        <div className="my-3.5 w-full overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-950/40">
-          <table className="w-full text-left text-xs sm:text-sm border-collapse">{children}</table>
+        <div className="my-4 w-full overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-950/40">
+          <table className="w-full text-left text-xs sm:text-sm border-collapse m-0 p-0">{children}</table>
         </div>
       );
     },
     thead({ children }: any) {
-      return <thead className="bg-neutral-900/90 border-b border-neutral-800 text-neutral-200">{children}</thead>;
+      return <thead className="bg-neutral-900/80 border-b border-neutral-800 text-neutral-200">{children}</thead>;
     },
     tbody({ children }: any) {
-      return <tbody className="divide-y divide-neutral-800/80">{children}</tbody>;
+      return <tbody className="divide-y divide-neutral-800/60">{children}</tbody>;
     },
     tr({ children }: any) {
-      return <tr className="hover:bg-neutral-900/40 transition">{children}</tr>;
+      return <tr className="hover:bg-neutral-900/30 transition-colors">{children}</tr>;
     },
     th({ children }: any) {
       return (
-        <th className="px-3.5 py-2.5 font-semibold text-xs tracking-wider uppercase text-neutral-300 border-r border-neutral-800/60 last:border-r-0 whitespace-nowrap">
+        <th className="px-4 py-3 font-semibold text-xs text-neutral-300 uppercase tracking-wider whitespace-nowrap">
           {children}
         </th>
       );
     },
     td({ children }: any) {
       return (
-        <td className="px-3.5 py-2.5 text-xs sm:text-sm text-neutral-300 border-r border-neutral-800/60 last:border-r-0">
+        <td className="px-4 py-3 text-xs sm:text-sm text-neutral-300 leading-relaxed">
           {children}
         </td>
       );
@@ -1013,15 +1126,27 @@ export default function ChatApp() {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {thinking && <ThinkingBlock thinking={thinking} />}
+                            {thinking && (
+                              <ThinkingBlock
+                                thinking={thinking}
+                                isThinking={isStreaming && isLastAssistant && !content}
+                              />
+                            )}
 
                             <div className="markdown-content">
-                              <ReactMarkdown
-                                remarkPlugins={[remarkGfm]}
-                                components={markdownComponents}
-                              >
-                                {content || (isStreaming && isLastAssistant ? "..." : "")}
-                              </ReactMarkdown>
+                              {content ? (
+                                <ReactMarkdown
+                                  remarkPlugins={[remarkGfm]}
+                                  components={markdownComponents}
+                                >
+                                  {content}
+                                </ReactMarkdown>
+                              ) : isStreaming && isLastAssistant ? (
+                                <div className="flex items-center gap-2 py-1.5 text-neutral-400 text-xs font-mono">
+                                  <span className="w-2 h-2 rounded-full bg-neutral-400 animate-pulse"></span>
+                                  <span>{thinking ? "Javob shakllanmoqda..." : "Fikrlanmoqda va javob yozilmoqda..."}</span>
+                                </div>
+                              ) : null}
                             </div>
 
                             {/* Message Actions Bar (Claude Style) */}
