@@ -13,8 +13,9 @@ export const metadata: Metadata = {
   description: "Muhammadrasul tomonidan yaratilgan AI yordamchi",
   icons: {
     icon: [
-      { url: "/favicon-32-black.png", sizes: "32x32", type: "image/png" },
-      { url: "/logo-black.png", sizes: "any", type: "image/png" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-white.png", sizes: "256x256", type: "image/png" },
+      { url: "/logo-white.png", sizes: "512x512", type: "image/png" },
     ],
     apple: "/apple-icon.png",
   },
