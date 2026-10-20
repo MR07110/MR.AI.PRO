@@ -19,6 +19,9 @@ import {
   RotateCcw,
   Sparkles,
   ExternalLink,
+  Zap,
+  Crown,
+  ShieldCheck,
 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
@@ -769,7 +772,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                             : "text-neutral-400 hover:text-white"
                         }`}
                       >
-                        <span>🎁</span>
+                        <Zap className="w-3.5 h-3.5" />
                         <span>Bepul ({keys.filter((k) => isModelFree(k.model)).length})</span>
                       </button>
                       <button
@@ -781,7 +784,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                             : "text-neutral-400 hover:text-white"
                         }`}
                       >
-                        <span>💎</span>
+                        <Crown className="w-3.5 h-3.5" />
                         <span>Pullik ({keys.filter((k) => !isModelFree(k.model)).length})</span>
                       </button>
                     </div>
@@ -831,12 +834,12 @@ export default function SettingsModal({ open, onClose }: Props) {
                                       {k.name}
                                     </span>
                                     {isFree ? (
-                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-800 text-emerald-300">
-                                        🎁 BEPUL
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-800 text-emerald-300">
+                                        <Zap className="w-3 h-3 text-emerald-400" /> BEPUL
                                       </span>
                                     ) : (
-                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-950/90 border border-indigo-800 text-indigo-300">
-                                        💎 PULLIK
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-950/90 border border-indigo-800 text-indigo-300">
+                                        <Crown className="w-3 h-3 text-indigo-400" /> PULLIK
                                       </span>
                                     )}
                                     {k.is_default && (
@@ -940,7 +943,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                             : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"
                         }`}
                       >
-                        <span className="text-sm">🎁</span>
+                        <Zap className="w-3.5 h-3.5" />
                         <span>Bepul modellar (Free)</span>
                       </button>
                       <button
@@ -952,19 +955,23 @@ export default function SettingsModal({ open, onClose }: Props) {
                             : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"
                         }`}
                       >
-                        <span className="text-sm">💎</span>
+                        <Crown className="w-3.5 h-3.5" />
                         <span>Pullik modellar (Paid)</span>
                       </button>
                     </div>
                     <div className="px-3 py-2 rounded-lg bg-neutral-900/60 border border-neutral-800/80 text-[11px] text-neutral-400 flex items-center gap-2">
                       {pricingTier === "free" ? (
                         <>
-                          <span className="text-emerald-400 font-bold shrink-0">● Bepul rejim:</span>
+                          <span className="inline-flex items-center gap-1 text-emerald-400 font-semibold shrink-0">
+                            <Zap className="w-3 h-3" /> Bepul rejim:
+                          </span>
                           <span>Groq, Google AI Studio va OpenRouter :free modellari. Hisobda mablag‘ talab qilinmaydi.</span>
                         </>
                       ) : (
                         <>
-                          <span className="text-indigo-400 font-bold shrink-0">● Pullik rejim:</span>
+                          <span className="inline-flex items-center gap-1 text-indigo-400 font-semibold shrink-0">
+                            <Crown className="w-3 h-3" /> Pullik rejim:
+                          </span>
                           <span>ChatGPT-4o, Claude 3.5 Sonnet, DeepSeek R1, Grok flagman modellar.</span>
                         </>
                       )}
@@ -1046,7 +1053,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                           >
                             {tierFiltered.map((m) => (
                               <option key={m.id} value={m.id} className="bg-neutral-900 text-neutral-100">
-                                {m.name} {m.isFree ? "— 🎁 BEPUL" : "— 💎 PULLIK"}
+                                {m.name} {m.isFree ? "(Bepul)" : "(Pullik)"}
                               </option>
                             ))}
                             <option value="__custom__" className="bg-neutral-900 text-neutral-100">
@@ -1496,7 +1503,10 @@ export default function SettingsModal({ open, onClose }: Props) {
               </div>
 
               <div className="p-4 rounded-xl border border-neutral-800 bg-neutral-950/50 space-y-2 text-xs text-neutral-400 leading-relaxed">
-                <p className="font-semibold text-neutral-200">🔒 Xavfsizlik & Maxfiylik Kafolati:</p>
+                <p className="font-semibold text-neutral-200 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  Xavfsizlik & Maxfiylik Kafolati:
+                </p>
                 <p>
                   Siz kiritgan har bir API kalit faqat sizning shaxsiy ma'lumotlar bazangizda shifrlangan saqlanadi. MR AI uchinchi tomonlarga hech qanday ma'lumot yubormaydi.
                 </p>
