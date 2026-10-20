@@ -303,17 +303,17 @@ export default function ChatApp() {
   const displayName = user?.email?.split("@")[0] || "User";
 
   return (
-    <div className="h-screen flex bg-white text-neutral-900 overflow-hidden">
+    <div className="h-screen flex bg-neutral-950 text-neutral-100 overflow-hidden">
       {/* Sidebar */}
       <aside
         className={`${
           sidebarOpen ? "w-[260px]" : "w-0"
-        } hidden md:flex flex-col border-r border-neutral-200 bg-[#f9f9f9] transition-all duration-200 overflow-hidden shrink-0`}
+        } hidden md:flex flex-col border-r border-neutral-800 bg-neutral-900 transition-all duration-200 overflow-hidden shrink-0`}
       >
         <div className="p-3">
           <button
             onClick={createNewChat}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-200 bg-white text-sm font-medium hover:bg-neutral-50 transition"
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-neutral-200 text-sm font-medium hover:bg-neutral-800/80 transition cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             Yangi suhbat
@@ -325,17 +325,17 @@ export default function ChatApp() {
             <button
               key={chat.id}
               onClick={() => setCurrentChatId(chat.id)}
-              className={`w-full group flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-left transition ${
+              className={`w-full group flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-left transition cursor-pointer ${
                 currentChatId === chat.id
-                  ? "bg-neutral-200/80 text-neutral-900"
-                  : "text-neutral-600 hover:bg-neutral-100"
+                  ? "bg-neutral-800 text-neutral-100 font-medium"
+                  : "text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200"
               }`}
             >
               <MessageSquare className="w-4 h-4 shrink-0 opacity-60" />
               <span className="truncate flex-1">{chat.title}</span>
               <span
                 onClick={(e) => deleteChat(chat.id, e)}
-                className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-500 transition"
+                className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 transition"
               >
                 <X className="w-3.5 h-3.5" />
               </span>
@@ -344,29 +344,29 @@ export default function ChatApp() {
         </div>
 
         {/* User section */}
-        <div className="p-3 border-t border-neutral-200 space-y-1">
+        <div className="p-3 border-t border-neutral-800 space-y-1">
           <button
             onClick={() => {
               setSettingsOpen(true);
               loadDefaultKey();
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-neutral-700 hover:bg-neutral-100 transition"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-neutral-300 hover:bg-neutral-800 transition cursor-pointer"
           >
             <Settings className="w-4 h-4" />
             Settings
           </button>
           <div className="flex items-center gap-2.5 px-3 py-2">
-            <div className="w-7 h-7 rounded-full bg-neutral-900 text-white flex items-center justify-center text-xs font-semibold uppercase">
+            <div className="w-7 h-7 rounded-full bg-neutral-800 border border-neutral-700 text-white flex items-center justify-center text-xs font-semibold uppercase">
               {displayName.charAt(0)}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{displayName}</p>
-              <p className="text-[11px] text-neutral-400 truncate">{user?.email}</p>
+              <p className="text-sm font-medium truncate text-neutral-200">{displayName}</p>
+              <p className="text-[11px] text-neutral-500 truncate">{user?.email}</p>
             </div>
             <button
               onClick={signOut}
               title="Chiqish"
-              className="p-1.5 rounded-lg hover:bg-neutral-200 transition text-neutral-500"
+              className="p-1.5 rounded-lg hover:bg-neutral-800 transition text-neutral-400 hover:text-neutral-200 cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -377,18 +377,18 @@ export default function ChatApp() {
       {/* Mobile sidebar overlay */}
       {mobileSidebar && (
         <div className="md:hidden fixed inset-0 z-40 flex">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setMobileSidebar(false)} />
-          <div className="relative w-[280px] bg-[#f9f9f9] flex flex-col h-full">
-            <div className="p-3 flex items-center justify-between">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileSidebar(false)} />
+          <div className="relative w-[280px] bg-neutral-900 text-neutral-100 flex flex-col h-full border-r border-neutral-800">
+            <div className="p-3 flex items-center justify-between border-b border-neutral-800">
               <span className="font-semibold text-sm">Suhbatlar</span>
-              <button onClick={() => setMobileSidebar(false)}>
+              <button onClick={() => setMobileSidebar(false)} className="p-1 text-neutral-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-3 pt-0">
+            <div className="p-3">
               <button
                 onClick={createNewChat}
-                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-200 bg-white text-sm font-medium"
+                className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border border-neutral-800 bg-neutral-950 text-sm font-medium text-neutral-200 hover:bg-neutral-800"
               >
                 <Plus className="w-4 h-4" />
                 Yangi suhbat
@@ -403,7 +403,7 @@ export default function ChatApp() {
                     setMobileSidebar(false);
                   }}
                   className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-left ${
-                    currentChatId === chat.id ? "bg-neutral-200" : "hover:bg-neutral-100"
+                    currentChatId === chat.id ? "bg-neutral-800 text-white" : "text-neutral-400 hover:bg-neutral-800/50"
                   }`}
                 >
                   <MessageSquare className="w-4 h-4 opacity-60" />
@@ -416,37 +416,37 @@ export default function ChatApp() {
       )}
 
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-neutral-950">
         {/* Top bar */}
-        <header className="h-13 border-b border-neutral-200 flex items-center justify-between px-4 shrink-0">
+        <header className="h-14 border-b border-neutral-800 bg-neutral-950/80 backdrop-blur flex items-center justify-between px-4 shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileSidebar(true)}
-              className="md:hidden p-1.5 rounded-lg hover:bg-neutral-100"
+              className="md:hidden p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-300"
             >
               <Menu className="w-5 h-5" />
             </button>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="hidden md:flex p-1.5 rounded-lg hover:bg-neutral-100"
+              className="hidden md:flex p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-300 cursor-pointer"
             >
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-2">
-              <Image src="/logo-black.png" alt="MR AI" width={22} height={22} />
-              <span className="font-semibold text-sm">MR AI</span>
+              <Image src="/logo-white.png" alt="MR AI" width={22} height={22} />
+              <span className="font-semibold text-sm text-neutral-100">MR AI</span>
             </div>
           </div>
 
           {defaultKey ? (
-            <div className="flex items-center gap-1.5 text-xs text-neutral-500 bg-neutral-100 px-2.5 py-1 rounded-full">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+            <div className="flex items-center gap-1.5 text-xs text-neutral-300 bg-neutral-900 border border-neutral-800 px-2.5 py-1 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               {defaultKey.provider} · {defaultKey.model}
             </div>
           ) : (
             <button
               onClick={() => setSettingsOpen(true)}
-              className="text-xs text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full hover:bg-amber-100 transition"
+              className="text-xs text-amber-300 bg-amber-950/60 border border-amber-900/60 px-2.5 py-1 rounded-full hover:bg-amber-900/60 transition cursor-pointer"
             >
               API Key qo‘shing
             </button>
@@ -457,13 +457,13 @@ export default function ChatApp() {
         <div className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center px-4">
-              <div className="w-14 h-14 rounded-2xl bg-neutral-100 flex items-center justify-center mb-5">
-                <Image src="/logo-black.png" alt="MR AI" width={32} height={32} />
+              <div className="w-14 h-14 rounded-2xl bg-neutral-900 border border-neutral-800 flex items-center justify-center mb-5 shadow-inner">
+                <Image src="/logo-white.png" alt="MR AI" width={32} height={32} />
               </div>
-              <h2 className="text-xl font-semibold text-neutral-900 mb-1">
+              <h2 className="text-xl font-semibold text-neutral-100 mb-1">
                 MR AI bilan suhbat
               </h2>
-              <p className="text-sm text-neutral-500 max-w-sm text-center">
+              <p className="text-sm text-neutral-400 max-w-sm text-center">
                 Savolingizni yozing. Istagan model va API key bilan ishlay olasiz.
               </p>
             </div>
@@ -475,19 +475,19 @@ export default function ChatApp() {
                   className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
                 >
                   {msg.role === "assistant" && (
-                    <div className="w-8 h-8 rounded-full bg-neutral-100 flex items-center justify-center shrink-0 mt-0.5">
-                      <Image src="/logo-black.png" alt="" width={18} height={18} />
+                    <div className="w-8 h-8 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center shrink-0 mt-0.5">
+                      <Image src="/logo-white.png" alt="" width={18} height={18} />
                     </div>
                   )}
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${
                       msg.role === "user"
-                        ? "bg-neutral-900 text-white"
-                        : "bg-transparent text-neutral-800"
+                        ? "bg-neutral-800 border border-neutral-700/60 text-white"
+                        : "bg-transparent text-neutral-200"
                     }`}
                   >
                     {msg.role === "assistant" ? (
-                      <div className="prose prose-neutral prose-sm max-w-none prose-p:my-2 prose-pre:bg-neutral-900 prose-pre:text-neutral-100">
+                      <div className="prose prose-invert prose-sm max-w-none prose-p:my-2 prose-pre:bg-neutral-900 prose-pre:border prose-pre:border-neutral-800 prose-pre:text-neutral-100">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {msg.content || "▋"}
                         </ReactMarkdown>
@@ -504,9 +504,9 @@ export default function ChatApp() {
         </div>
 
         {/* Input area */}
-        <div className="border-t border-neutral-200 bg-white px-4 py-3">
+        <div className="border-t border-neutral-800 bg-neutral-950 px-4 py-3">
           <div className="max-w-3xl mx-auto">
-            <div className="relative flex items-end gap-2 bg-white border border-neutral-200 rounded-2xl shadow-sm focus-within:border-neutral-400 transition">
+            <div className="relative flex items-end gap-2 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-md focus-within:border-neutral-600 transition">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -517,14 +517,14 @@ export default function ChatApp() {
                 onKeyDown={handleKeyDown}
                 placeholder="Xabar yozing..."
                 rows={1}
-                className="flex-1 resize-none bg-transparent px-4 py-3 text-[15px] placeholder:text-neutral-400 max-h-[200px] focus:outline-none"
+                className="flex-1 resize-none bg-transparent px-4 py-3 text-[15px] text-neutral-100 placeholder:text-neutral-500 max-h-[200px] focus:outline-none"
                 disabled={isStreaming}
               />
               <div className="pr-2 pb-2">
                 {isStreaming ? (
                   <button
                     onClick={stopStreaming}
-                    className="w-9 h-9 rounded-xl bg-neutral-900 text-white flex items-center justify-center hover:bg-neutral-700 transition"
+                    className="w-9 h-9 rounded-xl bg-neutral-700 text-white flex items-center justify-center hover:bg-neutral-600 transition cursor-pointer"
                   >
                     <Square className="w-3.5 h-3.5 fill-current" />
                   </button>
@@ -532,14 +532,14 @@ export default function ChatApp() {
                   <button
                     onClick={sendMessage}
                     disabled={!input.trim()}
-                    className="w-9 h-9 rounded-xl bg-neutral-900 text-white flex items-center justify-center hover:bg-neutral-700 transition disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="w-9 h-9 rounded-xl bg-white text-neutral-950 flex items-center justify-center hover:bg-neutral-200 transition disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
                   </button>
                 )}
               </div>
             </div>
-            <p className="text-center text-[11px] text-neutral-400 mt-2">
+            <p className="text-center text-[11px] text-neutral-500 mt-2">
               MR AI · Muhammadrasul tomonidan asos solingan
             </p>
           </div>

@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="uz" className={`${inter.variable} h-full`}>
-      <body className="min-h-full bg-white text-neutral-900 antialiased font-[family-name:var(--font-inter)]">
+      <body className="min-h-full bg-neutral-950 text-neutral-100 antialiased font-[family-name:var(--font-inter)] dark">
         {children}
       </body>
     </html>

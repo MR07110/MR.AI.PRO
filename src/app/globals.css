@@ -1,20 +1,20 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #ffffff;
-  --bg-secondary: #f7f7f8;
-  --bg-sidebar: #f9f9f9;
-  --border: #e5e5e5;
-  --border-light: #f0f0f0;
-  --text: #0d0d0d;
-  --text-secondary: #6b6b6b;
-  --text-muted: #8e8e8e;
-  --accent: #0d0d0d;
-  --accent-hover: #2a2a2a;
-  --user-bubble: #f4f4f4;
+  --bg: #0a0a0a;
+  --bg-secondary: #141414;
+  --bg-sidebar: #111111;
+  --border: #262626;
+  --border-light: #1c1c1c;
+  --text: #ededed;
+  --text-secondary: #a1a1a1;
+  --text-muted: #737373;
+  --accent: #ffffff;
+  --accent-hover: #e5e5e5;
+  --user-bubble: #262626;
   --assistant-bubble: transparent;
-  --input-bg: #ffffff;
-  --shadow: 0 1px 3px rgba(0,0,0,0.06);
+  --input-bg: #141414;
+  --shadow: 0 1px 3px rgba(0,0,0,0.5);
 }
 
 * {
@@ -25,9 +25,12 @@ html, body {
   height: 100%;
   margin: 0;
   padding: 0;
+  background-color: #0a0a0a;
+  color: #ededed;
+  color-scheme: dark;
 }
 
-/* Clean scrollbar - like modern apps */
+/* Clean scrollbar for dark theme */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -36,20 +39,21 @@ html, body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d1d1d1;
+  background: #333333;
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #b0b0b0;
+  background: #4f4f4f;
 }
 
 /* Focus rings */
-input:focus, textarea:focus, button:focus-visible {
-  outline: 2px solid #0d0d0d;
+input:focus, textarea:focus, button:focus-visible, select:focus {
+  outline: 2px solid #525252;
   outline-offset: 2px;
 }
 
 /* Selection */
 ::selection {
-  background: #e5e5e5;
+  background: #2e2e2e;
+  color: #ffffff;
 }
