@@ -322,7 +322,7 @@ export default function ArtifactPanel({ artifact, onClose }: Props) {
               ref={iframeRef}
               srcDoc={generateSandboxHtml(lang, artifact.code)}
               title={title}
-              sandbox="allow-scripts allow-modals allow-forms allow-same-origin"
+              sandbox="allow-scripts allow-modals allow-forms"
               className="w-full h-full border-0 bg-white dark:bg-neutral-950"
             />
           </div>
@@ -1399,11 +1399,24 @@ function generateSandboxHtml(language: string, rawCode: string): string {
     rawCode.includes("useEffect");
 
   if (isReact) {
-    // Strip import / export statements for browser standalone Babel
+    // Strip markdown fences if present
     let cleanedCode = rawCode
+      .replace(/^```[a-zA-Z0-9_-]*\s*\n?/gm, "")
+      .replace(/```\s*$/gm, "")
+      .replace(/```/g, "");
+
+    // Strip import / export statements for browser standalone Babel
+    cleanedCode = cleanedCode
       .replace(/import\s+.*?;?\s*$/gm, "")
       .replace(/export\s+default\s+/g, "const App = ")
       .replace(/export\s+/g, "");
+
+    // Strip duplicate createRoot / render calls if AI already generated them at the bottom
+    cleanedCode = cleanedCode
+      .replace(/const\s+root\s*=\s*ReactDOM\.createRoot.*?$/gm, "")
+      .replace(/ReactDOM\.createRoot.*?$/gm, "")
+      .replace(/root\.render\s*\(.*?\);?/gm, "")
+      .replace(/ReactDOM\.render\s*\(.*?\);?/gm, "");
 
     // If no App is defined, find component name or wrap
     if (!cleanedCode.includes("const App") && !cleanedCode.includes("function App")) {
@@ -1433,8 +1446,15 @@ function generateSandboxHtml(language: string, rawCode: string): string {
 </head>
 <body>
   <div id="root"></div>
-  <script type="text/babel">
-    const { useState, useEffect, useRef, useMemo, useCallback } = React;
+  <script type="text/babel" data-presets="react,typescript">
+    const { useState, useEffect, useRef, useMemo, useCallback, useId } = React;
+
+    window.onerror = function(msg, url, line, col, error) {
+      const root = document.getElementById("root");
+      if (root) {
+        root.innerHTML = '<div style="padding: 1.5rem; color: #f87171; font-family: monospace; font-size: 13px; line-height: 1.6; background: #18181b; border: 1px solid #27272a; border-radius: 8px; margin: 1rem;"><b style="color: #ef4444;">Komponent Xatosi:</b><br/>' + (error ? error.message : msg) + '<br/><span style="color: #71717a; font-size: 11px;">Qator: ' + line + '</span></div>';
+      }
+    };
 
     try {
       ${cleanedCode}
@@ -1446,7 +1466,7 @@ function generateSandboxHtml(language: string, rawCode: string): string {
         document.getElementById('root').innerHTML = '<div style="padding: 1.5rem; color: #f87171;">React App komponenti topilmadi.</div>';
       }
     } catch (err) {
-      document.getElementById('root').innerHTML = '<div style="padding: 1.5rem; color: #f87171; font-family: monospace;"><b>React Render Xatosi:</b><br/>' + err.message + '</div>';
+      document.getElementById('root').innerHTML = '<div style="padding: 1.5rem; color: #f87171; font-family: monospace; font-size: 13px; line-height: 1.6; background: #18181b; border: 1px solid #27272a; border-radius: 8px; margin: 1rem;"><b style="color: #ef4444;">React Render Xatosi:</b><br/>' + err.message + '</div>';
     }
   </script>
 </body>
