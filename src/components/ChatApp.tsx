@@ -402,6 +402,9 @@ export default function ChatApp() {
       setChats((prev) => [data, ...prev]);
     }
 
+    if (!chatId) return;
+    const activeChatId: string = chatId;
+
     if (!promptOverride) {
       setInput("");
       if (textareaRef.current) textareaRef.current.style.height = "auto";
@@ -411,7 +414,7 @@ export default function ChatApp() {
     const tempUserId = crypto.randomUUID();
     const nextUserMsg: Message = {
       id: tempUserId,
-      chat_id: chatId,
+      chat_id: activeChatId,
       role: "user",
       content: textToSend,
       created_at: new Date().toISOString(),
@@ -421,7 +424,7 @@ export default function ChatApp() {
 
     // Save to Supabase
     await supabase.from("messages").insert({
-      chat_id: chatId,
+      chat_id: activeChatId,
       role: "user",
       content: textToSend,
     });
@@ -435,7 +438,7 @@ export default function ChatApp() {
       { role: "user" as const, content: textToSend },
     ];
 
-    await executeChatStream(chatId, history);
+    await executeChatStream(activeChatId, history);
   }
 
   // Regenerate last assistant response (Claude style)
