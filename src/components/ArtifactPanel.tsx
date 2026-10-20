@@ -1204,26 +1204,35 @@ function generateSandboxHtml(language: string, rawCode: string): string {
     }
 
     async function runInitialScript() {
+      const saved = localStorage.getItem("mrai_server_url");
+      const host = saved ? "cloudshell" : "mrai-sandbox";
+      const promptUser = saved ? "cloudshell" : "user@mrai-sandbox";
+
       appendHtml(
         '<div class="banner">' +
-        '  <b>Ubuntu 24.04 LTS (GNU/Linux 6.8.0 x86_64 WebAssembly)</b><br/>' +
-        '  * Cloud Host: mrai-sandbox (Virtual In-Memory Linux Environment)<br/>' +
-        '  * Holat: Tayyor • 100% Free • Unlimited Sandbox<br/>' +
+        '  <b>Ubuntu 24.04 (' + (saved ? '<span style="color:#3fb950;">Google Cloud Shell Real Linux</span>' : 'Virtual Linux Sandbox') + ')</b><br/>' +
+        '  * Host: ' + host + ' • ' + (saved ? '<span style="color:#3fb950;">Haqiqiy Server Ulangan</span>' : 'Standart Sandbox') + '<br/>' +
         '  Buyruqlar ro\\'yxati uchun: <span style="color: #79c0ff;">help</span> deb yozing.<br/>' +
         '</div>'
       );
 
-      appendHtml('<div class="line"><span class="prompt-user">user@mrai-sandbox</span>:<span class="prompt-path">~</span><span class="prompt-char">$ </span><span class="cmd-text">bash script.sh</span></div>');
+      appendHtml('<div class="line"><span class="prompt-user">' + promptUser + '</span>:<span class="prompt-path">' + escapeHtml(formatPath(cwd)) + '</span><span class="prompt-char">$ </span><span class="cmd-text">bash script.sh</span></div>');
 
-      const lines = scriptSource.split("\\n");
-      for (const rawLine of lines) {
-        const line = rawLine.trim();
-        if (line) {
-          await new Promise(r => setTimeout(r, 60));
-          if (!line.startsWith("#")) {
-            appendHtml('<div class="line" style="color: #8b949e; font-size: 11px;"><span style="color: #58a6ff;">&gt;</span> ' + escapeHtml(line) + '</div>');
+      if (saved) {
+        // Execute entire multi-line bash script at once on real Google Cloud Shell!
+        await execCommand(scriptSource);
+      } else {
+        // Local fallback execution line-by-line
+        const lines = scriptSource.split("\\n");
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (line) {
+            await new Promise(r => setTimeout(r, 40));
+            if (!line.startsWith("#")) {
+              appendHtml('<div class="line" style="color: #8b949e; font-size: 11px;"><span style="color: #58a6ff;">&gt;</span> ' + escapeHtml(line) + '</div>');
+            }
+            await execCommand(line);
           }
-          await execCommand(line);
         }
       }
 
