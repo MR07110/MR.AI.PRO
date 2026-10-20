@@ -861,7 +861,10 @@ function generateSandboxHtml(language: string, rawCode: string): string {
         try {
           const res = await fetch(savedServer.replace(/\/+$/, "") + "/exec", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "1"
+            },
             body: JSON.stringify({ command: trimmed, cwd: cwd })
           });
           const data = await res.json();

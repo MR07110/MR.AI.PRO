@@ -1,8 +1,22 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { User, Session } from "@supabase/supabase-js";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+
+export interface UserMetadata {
+  full_name: string;
+  username: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  user_metadata: UserMetadata;
+}
+
+export interface Session {
+  user: User;
+  access_token: string;
+}
 
 export function formatUsernameToEmail(username: string): string {
   const trimmed = username.trim().toLowerCase();
@@ -22,101 +36,96 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const STORAGE_KEY_USER = "mrai_auth_user";
+const STORAGE_KEY_PASS = "mrai_auth_password";
+
+const DEFAULT_USER: User = {
+  id: "mrqosimov2011",
+  email: "mrqosimov2011@mrai.local",
+  user_metadata: {
+    full_name: "Mr Qosimov",
+    username: "mrqosimov2011",
+  },
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
-
-    async function init() {
-      try {
-        const supabase = await getSupabaseBrowserClient();
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (mounted) {
-          setSession(session);
-          setUser(session?.user ?? null);
-          setLoading(false);
-        }
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          (_event, session) => {
-            if (mounted) {
-              setSession(session);
-              setUser(session?.user ?? null);
-            }
-          }
-        );
-
-        return () => {
-          subscription.unsubscribe();
-        };
-      } catch (err) {
-        console.error("Auth init error:", err);
-        if (mounted) setLoading(false);
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_USER);
+      if (saved) {
+        const parsed: User = JSON.parse(saved);
+        setUser(parsed);
+        setSession({ user: parsed, access_token: "mrai-token" });
+      } else {
+        // By default, since this is a private personal server, auto-activate default user
+        setUser(DEFAULT_USER);
+        setSession({ user: DEFAULT_USER, access_token: "mrai-token" });
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(DEFAULT_USER));
       }
+    } catch {
+      setUser(DEFAULT_USER);
+      setSession({ user: DEFAULT_USER, access_token: "mrai-token" });
+    } finally {
+      setLoading(false);
     }
-
-    const cleanup = init();
-    return () => {
-      mounted = false;
-      cleanup.then((fn) => fn && fn());
-    };
   }, []);
 
   const signIn = async (username: string, password: string) => {
-    const supabase = await getSupabaseBrowserClient();
-    const email = formatUsernameToEmail(username);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    return { data, error: error?.message ?? null };
+    const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "");
+    const savedPass = localStorage.getItem(STORAGE_KEY_PASS);
+
+    if (savedPass && savedPass !== password) {
+      return { error: "Parol noto‘g‘ri kiritildi" };
+    }
+
+    const authUser: User = {
+      id: cleanUsername || "mrqosimov2011",
+      email: formatUsernameToEmail(cleanUsername || "mrqosimov2011"),
+      user_metadata: {
+        full_name: cleanUsername === "mrqosimov2011" ? "Mr Qosimov" : cleanUsername,
+        username: cleanUsername,
+      },
+    };
+
+    setUser(authUser);
+    setSession({ user: authUser, access_token: "mrai-token" });
+    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(authUser));
+    if (password) {
+      localStorage.setItem(STORAGE_KEY_PASS, password);
+    }
+
+    return { data: { user: authUser }, error: null };
   };
 
   const signUp = async (name: string, username: string, password: string) => {
-    const supabase = await getSupabaseBrowserClient();
     const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, "");
-    const email = formatUsernameToEmail(cleanUsername);
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: name.trim(),
-          username: cleanUsername,
-        },
+    const authUser: User = {
+      id: cleanUsername,
+      email: formatUsernameToEmail(cleanUsername),
+      user_metadata: {
+        full_name: name.trim(),
+        username: cleanUsername,
       },
-    });
+    };
 
-    if (error) {
-      return { error: error.message };
+    setUser(authUser);
+    setSession({ user: authUser, access_token: "mrai-token" });
+    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(authUser));
+    if (password) {
+      localStorage.setItem(STORAGE_KEY_PASS, password);
     }
 
-    if (data?.session) {
-      setSession(data.session);
-      setUser(data.user);
-      return { data, error: null };
-    }
-
-    // Attempt automatic login immediately if session wasn't returned
-    const signInRes = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInRes.data?.session) {
-      setSession(signInRes.data.session);
-      setUser(signInRes.data.user);
-      return { data: signInRes.data, error: null };
-    }
-
-    return { data, error: null };
+    return { data: { user: authUser }, error: null };
   };
 
   const signOut = async () => {
-    const supabase = await getSupabaseBrowserClient();
-    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
+    localStorage.removeItem(STORAGE_KEY_USER);
   };
 
   return (
@@ -127,7 +136,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
 }

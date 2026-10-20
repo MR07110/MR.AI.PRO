@@ -32,7 +32,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import * as serverDb from "@/lib/serverDb";
 import SettingsModal from "./SettingsModal";
 import ArtifactPanel, {
   ArtifactData,
@@ -55,7 +55,7 @@ function CodeBlock({
   onOpenArtifact?: (data: ArtifactData) => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const [serverUrl, setServerUrl] = useState("");
+  const [serverUrl, setServerUrl] = useState("https://satisfy-endurance-mooned.ngrok-free.dev");
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<{ stdout: string; stderr: string; exit_code: number } | null>(null);
 
@@ -65,7 +65,7 @@ function CodeBlock({
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setServerUrl(localStorage.getItem("mrai_server_url") || "");
+      setServerUrl(localStorage.getItem("mrai_server_url") || "https://satisfy-endurance-mooned.ngrok-free.dev");
     }
   }, []);
 
@@ -95,7 +95,10 @@ function CodeBlock({
     try {
       const res = await fetch(serverUrl.replace(/\/+$/, "") + "/exec", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "1"
+        },
         body: JSON.stringify({ command: value })
       });
       const data = await res.json();
@@ -379,54 +382,37 @@ export default function ChatApp() {
 
   async function loadChats() {
     if (!user) return;
-    const supabase = await getSupabaseBrowserClient();
-    const { data } = await supabase
-      .from("chats")
-      .select("*")
-      .eq("user_id", user.id)
-      .order("updated_at", { ascending: false });
-    setChats(data || []);
+    try {
+      const data = await serverDb.getChats();
+      setChats(data || []);
+    } catch (e) {
+      console.error("loadChats error:", e);
+    }
   }
 
   async function loadDefaultKey(): Promise<UserApiKey | null> {
     if (!user) return null;
-    const supabase = await getSupabaseBrowserClient();
-    let { data } = await supabase
-      .from("user_api_keys")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("is_default", true)
-      .maybeSingle();
-
-    if (!data) {
-      const { data: anyKeys } = await supabase
-        .from("user_api_keys")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (anyKeys && anyKeys.length > 0) {
-        data = anyKeys[0];
-        await supabase
-          .from("user_api_keys")
-          .update({ is_default: true })
-          .eq("id", data.id);
+    try {
+      const keys = await serverDb.getKeys();
+      let def = keys.find((k) => k.is_default);
+      if (!def && keys.length > 0) {
+        def = keys[0];
+        await serverDb.setDefaultKey(def.id);
       }
+      setDefaultKey(def || null);
+      return def || null;
+    } catch {
+      return null;
     }
-
-    setDefaultKey(data || null);
-    return data || null;
   }
 
   async function loadMessages(chatId: string) {
-    const supabase = await getSupabaseBrowserClient();
-    const { data } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("chat_id", chatId)
-      .order("created_at", { ascending: true });
-    setMessages(data || []);
+    try {
+      const data = await serverDb.getMessages(chatId);
+      setMessages(data || []);
+    } catch (e) {
+      console.error("loadMessages error:", e);
+    }
   }
 
   function createNewChat() {
@@ -446,8 +432,7 @@ export default function ChatApp() {
   async function deleteChat(id: string, e: React.MouseEvent) {
     e.stopPropagation();
     if (!confirm("Suhbat o‘chirilsinmi?")) return;
-    const supabase = await getSupabaseBrowserClient();
-    await supabase.from("chats").delete().eq("id", id);
+    await serverDb.deleteChat(id);
     setChats((prev) => prev.filter((c) => c.id !== id));
     if (currentChatId === id) {
       setCurrentChatId(null);
@@ -461,8 +446,7 @@ export default function ChatApp() {
       return;
     }
     const cleanTitle = editingTitle.trim();
-    const supabase = await getSupabaseBrowserClient();
-    await supabase.from("chats").update({ title: cleanTitle }).eq("id", id);
+    await serverDb.updateChatTitle(id, cleanTitle);
     setChats((prev) =>
       prev.map((c) => (c.id === id ? { ...c, title: cleanTitle } : c))
     );
@@ -671,20 +655,9 @@ export default function ChatApp() {
         )
       );
 
-      // Save assistant message to Supabase
+      // Save assistant message to Server / SQLite
       if (fullFinalContent.trim()) {
-        const supabase = await getSupabaseBrowserClient();
-        await supabase.from("messages").insert({
-          chat_id: chatId,
-          role: "assistant",
-          content: fullFinalContent,
-        });
-
-        // Update chat timestamp
-        await supabase
-          .from("chats")
-          .update({ updated_at: new Date().toISOString() })
-          .eq("id", chatId);
+        await serverDb.saveMessage(chatId, "assistant", fullFinalContent, tempAiId);
       }
     } catch (err: any) {
       isStreamingActiveRef.current = false;
@@ -697,12 +670,7 @@ export default function ChatApp() {
         const partial = displayedTextRef.current || targetTextRef.current;
         if (partial.trim()) {
           try {
-            const supabase = await getSupabaseBrowserClient();
-            await supabase.from("messages").insert({
-              chat_id: chatId,
-              role: "assistant",
-              content: partial,
-            });
+            await serverDb.saveMessage(chatId, "assistant", partial, tempAiId);
           } catch {}
         }
       } else {
@@ -752,20 +720,14 @@ export default function ChatApp() {
     }
 
     let chatId = currentChatId;
-    const supabase = await getSupabaseBrowserClient();
 
     // Create chat if not exists
     if (!chatId) {
-      const { data } = await supabase
-        .from("chats")
-        .insert({ user_id: user.id, title: textToSend.slice(0, 45) })
-        .select()
-        .single();
-      if (!data) return;
-      chatId = data.id;
+      const newChat = await serverDb.createChat(textToSend.slice(0, 45));
+      chatId = newChat.id;
       skipNextLoadRef.current = chatId;
       setCurrentChatId(chatId);
-      setChats((prev) => [data, ...prev]);
+      setChats((prev) => [newChat, ...prev]);
     }
 
     if (!chatId) return;
@@ -788,12 +750,8 @@ export default function ChatApp() {
 
     setMessages((prev) => [...prev, nextUserMsg]);
 
-    // Save to Supabase
-    await supabase.from("messages").insert({
-      chat_id: activeChatId,
-      role: "user",
-      content: textToSend,
-    });
+    // Save to server / SQLite
+    await serverDb.saveMessage(activeChatId, "user", textToSend, tempUserId);
 
     // Prepare history
     const history = [
@@ -832,14 +790,7 @@ export default function ChatApp() {
     const trimmedMessages = messages.slice(0, lastUserIdx + 1);
     setMessages(trimmedMessages);
 
-    const supabase = await getSupabaseBrowserClient();
     const cutTime = trimmedMessages[lastUserIdx].created_at;
-    await supabase
-      .from("messages")
-      .delete()
-      .eq("chat_id", currentChatId)
-      .eq("role", "assistant")
-      .gt("created_at", cutTime);
 
     const history = trimmedMessages.map((m) => ({
       role: m.role as "user" | "assistant",

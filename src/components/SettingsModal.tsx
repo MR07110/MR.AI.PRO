@@ -26,7 +26,7 @@ import {
   Server,
   Copy,
 } from "lucide-react";
-import { getSupabaseBrowserClient } from "@/lib/supabase";
+import * as serverDb from "@/lib/serverDb";
 import { useAuth } from "@/hooks/useAuth";
 import type { UserApiKey, Provider } from "@/types";
 import {
@@ -327,7 +327,9 @@ export default function SettingsModal({ open, onClose }: Props) {
 
   useEffect(() => {
     if (open) {
-      const savedServer = typeof window !== "undefined" ? localStorage.getItem("mrai_server_url") || "" : "";
+      const savedServer = typeof window !== "undefined"
+        ? localStorage.getItem("mrai_server_url") || "https://satisfy-endurance-mooned.ngrok-free.dev"
+        : "https://satisfy-endurance-mooned.ngrok-free.dev";
       setServerUrl(savedServer);
       if (savedServer) {
         checkServer(savedServer, false);
@@ -354,7 +356,10 @@ export default function SettingsModal({ open, onClose }: Props) {
     setServerChecking(true);
     setServerStatus(null);
     try {
-      const res = await fetch(finalUrl.replace(/\/+$/, "") + "/", { signal: AbortSignal.timeout(6000) });
+      const res = await fetch(finalUrl.replace(/\/+$/, "") + "/", {
+        headers: { "ngrok-skip-browser-warning": "1" },
+        signal: AbortSignal.timeout(6000),
+      });
       const data = await res.json();
       if (data.status === "ok") {
         setServerStatus({
@@ -400,30 +405,18 @@ export default function SettingsModal({ open, onClose }: Props) {
 
   async function loadDataStats() {
     try {
-      const supabase = await getSupabaseBrowserClient();
-      const { count: cCount } = await supabase
-        .from("chats")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user?.id);
-      setTotalChats(cCount || 0);
-
-      const { count: mCount } = await supabase
-        .from("messages")
-        .select("*, chats!inner(user_id)", { count: "exact", head: true })
-        .eq("chats.user_id", user?.id);
-      setTotalMessages(mCount || 0);
+      const stats = await serverDb.getDataStats();
+      setTotalChats(stats.chatsCount || 0);
+      setTotalMessages(stats.messagesCount || 0);
     } catch {}
   }
 
   async function loadKeys() {
     setLoading(true);
-    const supabase = await getSupabaseBrowserClient();
-    const { data } = await supabase
-      .from("user_api_keys")
-      .select("*")
-      .eq("user_id", user?.id)
-      .order("created_at", { ascending: false });
-    setKeys(data || []);
+    try {
+      const data = await serverDb.getKeys();
+      setKeys(data || []);
+    } catch {}
     setLoading(false);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("mr_ai_keys_updated"));
@@ -527,18 +520,9 @@ export default function SettingsModal({ open, onClose }: Props) {
     setError("");
 
     try {
-      const supabase = await getSupabaseBrowserClient();
       const shouldBeDefault = isDefault || keys.length === 0;
 
-      if (shouldBeDefault) {
-        await supabase
-          .from("user_api_keys")
-          .update({ is_default: false })
-          .eq("user_id", user?.id);
-      }
-
-      const { error: insertError } = await supabase.from("user_api_keys").insert({
-        user_id: user?.id,
+      await serverDb.saveKey({
         provider,
         name: name.trim() || `${currentProvider.label.split(" ")[0]} (${finalModel})`,
         api_key: trimmedKey,
@@ -546,13 +530,6 @@ export default function SettingsModal({ open, onClose }: Props) {
         base_url: baseUrl.trim() || null,
         is_default: shouldBeDefault,
       });
-
-      if (insertError) {
-        setError(insertError.message);
-        setSaving(false);
-        setStatusMessage("");
-        return;
-      }
 
       setName("");
       setApiKey("");
@@ -620,16 +597,13 @@ export default function SettingsModal({ open, onClose }: Props) {
   }
 
   async function setAsDefault(id: string) {
-    const supabase = await getSupabaseBrowserClient();
-    await supabase.from("user_api_keys").update({ is_default: false }).eq("user_id", user?.id);
-    await supabase.from("user_api_keys").update({ is_default: true }).eq("id", id);
+    await serverDb.setDefaultKey(id);
     loadKeys();
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Bu API keyni o‘chirmoqchimisiz?")) return;
-    const supabase = await getSupabaseBrowserClient();
-    await supabase.from("user_api_keys").delete().eq("id", id);
+    await serverDb.deleteKey(id);
     loadKeys();
   }
 
@@ -643,14 +617,14 @@ export default function SettingsModal({ open, onClose }: Props) {
   // Update Profile Name
   async function handleUpdateName() {
     if (!newName.trim()) return;
-    const supabase = await getSupabaseBrowserClient();
-    const { error } = await supabase.auth.updateUser({
-      data: { full_name: newName.trim() },
-    });
-    if (!error) {
+    try {
+      const savedUserStr = localStorage.getItem("mrai_auth_user");
+      const savedUser = savedUserStr ? JSON.parse(savedUserStr) : {};
+      savedUser.user_metadata = { ...(savedUser.user_metadata || {}), full_name: newName.trim() };
+      localStorage.setItem("mrai_auth_user", JSON.stringify(savedUser));
       setNameSaved(true);
       setTimeout(() => setNameSaved(false), 2500);
-    }
+    } catch {}
   }
 
   // Change password
@@ -665,43 +639,44 @@ export default function SettingsModal({ open, onClose }: Props) {
       setPassError("Parollar mos kelmadi");
       return;
     }
-    const supabase = await getSupabaseBrowserClient();
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      setPassError(error.message);
-    } else {
+    try {
+      localStorage.setItem("mrai_auth_password", newPassword);
       setPassMessage("Parol muvaffaqiyatli yangilandi!");
       setNewPassword("");
       setConfirmPassword("");
+    } catch (e: any) {
+      setPassError(e?.message || "Xatolik yuz berdi");
     }
   }
 
   // Export chats
   async function handleExportChats() {
-    const supabase = await getSupabaseBrowserClient();
-    const { data: chatsData } = await supabase
-      .from("chats")
-      .select("*, messages(*)")
-      .eq("user_id", user?.id)
-      .order("created_at", { ascending: false });
+    try {
+      const chats = await serverDb.getChats();
+      const fullData = await Promise.all(
+        chats.map(async (c) => ({
+          ...c,
+          messages: await serverDb.getMessages(c.id),
+        }))
+      );
 
-    const blob = new Blob([JSON.stringify(chatsData || [], null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `mr-ai-chats-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const blob = new Blob([JSON.stringify(fullData || [], null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mr-ai-chats-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
   }
 
   // Clear all chats
   async function handleClearAllChats() {
     if (!confirm("DIQQAT: Barcha suhbatlar va xabarlar o‘chiriladi. Ushbu amalni ortga qaytarib bo‘lmaydi. Rozimisiz?"))
       return;
-    const supabase = await getSupabaseBrowserClient();
-    await supabase.from("chats").delete().eq("user_id", user?.id);
+    await serverDb.deleteAllChats();
     loadDataStats();
     window.location.reload();
   }
