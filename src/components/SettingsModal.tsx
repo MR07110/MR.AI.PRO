@@ -907,9 +907,10 @@ export default function SettingsModal({ open, onClose }: Props) {
                             </div>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      );
+                    })}
+                  </div>
+                )}
                 </>
               ) : (
                 /* ADD NEW KEY FORM */
