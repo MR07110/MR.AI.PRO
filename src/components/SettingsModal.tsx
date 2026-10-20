@@ -36,13 +36,21 @@ interface Props {
   onClose: () => void;
 }
 
+export interface ModelOption {
+  id: string;
+  name: string;
+  isFree?: boolean;
+}
+
 export interface ProviderOption {
   value: Provider;
   label: string;
   placeholder: string;
   defaultModel: string;
   defaultBaseUrl: string;
-  models: { id: string; name: string }[];
+  hasFree: boolean;
+  hasPaid: boolean;
+  models: ModelOption[];
 }
 
 export const PROVIDERS: ProviderOption[] = [
@@ -52,41 +60,17 @@ export const PROVIDERS: ProviderOption[] = [
     placeholder: "gsk_...",
     defaultModel: "openai/gpt-oss-120b",
     defaultBaseUrl: "https://api.groq.com/openai/v1",
+    hasFree: true,
+    hasPaid: true,
     models: [
-      { id: "openai/gpt-oss-120b", name: "GPT OSS 120B (Groq rasmiy tavsiya - Yangi)" },
-      { id: "openai/gpt-oss-20b", name: "GPT OSS 20B (Ultra tezkor)" },
-      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant" },
-      { id: "qwen/qwen3.8-27b", name: "Qwen 3.8 27B (Mantiq va kod)" },
-      { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill 70B" },
-      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Tier 2/Pullik)" },
-      { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B (32k kontekst)" },
-      { id: "gemma2-9b-it", name: "Google Gemma 2 9B" },
-    ],
-  },
-  {
-    value: "deepseek",
-    label: "DeepSeek (R1 & V3)",
-    placeholder: "sk-...",
-    defaultModel: "deepseek-chat",
-    defaultBaseUrl: "https://api.deepseek.com/v1",
-    models: [
-      { id: "deepseek-chat", name: "DeepSeek-V3 (Universal)" },
-      { id: "deepseek-reasoner", name: "DeepSeek-R1 (Chuqur fikrlash)" },
-    ],
-  },
-  {
-    value: "openai",
-    label: "OpenAI (ChatGPT)",
-    placeholder: "sk-proj-...",
-    defaultModel: "gpt-4o",
-    defaultBaseUrl: "https://api.openai.com/v1",
-    models: [
-      { id: "gpt-4o", name: "GPT-4o (Eng aqlli)" },
-      { id: "gpt-4o-mini", name: "GPT-4o Mini (Tez va tejamkor)" },
-      { id: "o3-mini", name: "o3-mini (Reasoning)" },
-      { id: "o1", name: "o1 (Murakkab tahlil)" },
-      { id: "gpt-4-turbo", name: "GPT-4 Turbo" },
-      { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo" },
+      { id: "openai/gpt-oss-120b", name: "GPT OSS 120B (Yangi - Tavsiya)", isFree: true },
+      { id: "openai/gpt-oss-20b", name: "GPT OSS 20B (Ultra tezkor)", isFree: true },
+      { id: "llama-3.1-8b-instant", name: "Llama 3.1 8B Instant", isFree: true },
+      { id: "qwen/qwen3.8-27b", name: "Qwen 3.8 27B (Mantiq va kod)", isFree: true },
+      { id: "deepseek-r1-distill-llama-70b", name: "DeepSeek R1 Distill 70B", isFree: true },
+      { id: "mixtral-8x7b-32768", name: "Mixtral 8x7B (32k kontekst)", isFree: true },
+      { id: "gemma2-9b-it", name: "Google Gemma 2 9B", isFree: true },
+      { id: "llama-3.3-70b-versatile", name: "Llama 3.3 70B (Tier 2/Pullik)", isFree: false },
     ],
   },
   {
@@ -95,38 +79,53 @@ export const PROVIDERS: ProviderOption[] = [
     placeholder: "AIzaSy...",
     defaultModel: "gemini-2.0-flash",
     defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    hasFree: true,
+    hasPaid: true,
     models: [
-      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (Yangi avlod)" },
-      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
-      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (2M kontekst)" },
+      { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash (Tezkor va bepul)", isFree: true },
+      { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash (1M kontekst)", isFree: true },
+      { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro (2M ulkan kontekst)", isFree: true },
+      { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro (Pullik flagman)", isFree: false },
     ],
   },
   {
     value: "openrouter",
-    label: "OpenRouter (Barcha modellar)",
+    label: "OpenRouter (Bepul va Pullik)",
     placeholder: "sk-or-v1-...",
-    defaultModel: "anthropic/claude-3.5-sonnet",
+    defaultModel: "meta-llama/llama-3.3-70b-instruct:free",
     defaultBaseUrl: "https://openrouter.ai/api/v1",
+    hasFree: true,
+    hasPaid: true,
     models: [
-      { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet" },
-      { id: "anthropic/claude-3.7-sonnet", name: "Claude 3.7 Sonnet" },
-      { id: "deepseek/deepseek-r1", name: "DeepSeek R1" },
-      { id: "deepseek/deepseek-chat", name: "DeepSeek V3" },
-      { id: "openai/gpt-4o", name: "OpenAI GPT-4o" },
-      { id: "google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash" },
-      { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B" },
+      { id: "meta-llama/llama-3.3-70b-instruct:free", name: "Llama 3.3 70B (:free)", isFree: true },
+      { id: "deepseek/deepseek-r1:free", name: "DeepSeek R1 (:free)", isFree: true },
+      { id: "deepseek/deepseek-chat:free", name: "DeepSeek V3 (:free)", isFree: true },
+      { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash (:free)", isFree: true },
+      { id: "qwen/qwen-2.5-coder-32b-instruct:free", name: "Qwen 2.5 Coder 32B (:free)", isFree: true },
+      { id: "mistralai/mistral-small-3:free", name: "Mistral Small 3 (:free)", isFree: true },
+      { id: "anthropic/claude-3.5-sonnet", name: "Claude 3.5 Sonnet", isFree: false },
+      { id: "anthropic/claude-3.7-sonnet", name: "Claude 3.7 Sonnet", isFree: false },
+      { id: "openai/gpt-4o", name: "OpenAI GPT-4o", isFree: false },
+      { id: "openai/gpt-4o-mini", name: "OpenAI GPT-4o Mini", isFree: false },
+      { id: "deepseek/deepseek-r1", name: "DeepSeek R1 (Premium pullik)", isFree: false },
+      { id: "meta-llama/llama-3.3-70b-instruct", name: "Llama 3.3 70B (Yuqori tezlik)", isFree: false },
     ],
   },
   {
-    value: "xai",
-    label: "xAI (Grok)",
-    placeholder: "xai-...",
-    defaultModel: "grok-2-latest",
-    defaultBaseUrl: "https://api.x.ai/v1",
+    value: "openai",
+    label: "OpenAI (ChatGPT)",
+    placeholder: "sk-proj-...",
+    defaultModel: "gpt-4o",
+    defaultBaseUrl: "https://api.openai.com/v1",
+    hasFree: false,
+    hasPaid: true,
     models: [
-      { id: "grok-2-latest", name: "Grok 2" },
-      { id: "grok-2-vision-latest", name: "Grok 2 Vision" },
-      { id: "grok-beta", name: "Grok Beta" },
+      { id: "gpt-4o", name: "GPT-4o (Eng aqlli flagman)", isFree: false },
+      { id: "gpt-4o-mini", name: "GPT-4o Mini (Tezkor va arzon)", isFree: false },
+      { id: "o3-mini", name: "o3-mini (Reasoning & Fikrlash)", isFree: false },
+      { id: "o1", name: "o1 (Chuqur tahlil)", isFree: false },
+      { id: "gpt-4-turbo", name: "GPT-4 Turbo", isFree: false },
+      { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", isFree: false },
     ],
   },
   {
@@ -135,10 +134,39 @@ export const PROVIDERS: ProviderOption[] = [
     placeholder: "sk-ant-api03-...",
     defaultModel: "claude-3-5-sonnet-20241022",
     defaultBaseUrl: "https://api.anthropic.com/v1",
+    hasFree: false,
+    hasPaid: true,
     models: [
-      { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet" },
-      { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku" },
-      { id: "claude-3-opus-20240229", name: "Claude 3 Opus" },
+      { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet (Yetakchi model)", isFree: false },
+      { id: "claude-3-5-haiku-20241022", name: "Claude 3.5 Haiku (Tezkor)", isFree: false },
+      { id: "claude-3-opus-20240229", name: "Claude 3 Opus (Gigant)", isFree: false },
+    ],
+  },
+  {
+    value: "deepseek",
+    label: "DeepSeek (R1 & V3)",
+    placeholder: "sk-...",
+    defaultModel: "deepseek-chat",
+    defaultBaseUrl: "https://api.deepseek.com/v1",
+    hasFree: false,
+    hasPaid: true,
+    models: [
+      { id: "deepseek-chat", name: "DeepSeek-V3 (Universal)", isFree: false },
+      { id: "deepseek-reasoner", name: "DeepSeek-R1 (Fikrlash - Reasoning)", isFree: false },
+    ],
+  },
+  {
+    value: "xai",
+    label: "xAI (Grok)",
+    placeholder: "xai-...",
+    defaultModel: "grok-2-latest",
+    defaultBaseUrl: "https://api.x.ai/v1",
+    hasFree: false,
+    hasPaid: true,
+    models: [
+      { id: "grok-2-latest", name: "Grok 2", isFree: false },
+      { id: "grok-2-vision-latest", name: "Grok 2 Vision", isFree: false },
+      { id: "grok-beta", name: "Grok Beta", isFree: false },
     ],
   },
   {
@@ -147,11 +175,13 @@ export const PROVIDERS: ProviderOption[] = [
     placeholder: "mistral_api_key...",
     defaultModel: "mistral-large-latest",
     defaultBaseUrl: "https://api.mistral.ai/v1",
+    hasFree: false,
+    hasPaid: true,
     models: [
-      { id: "mistral-large-latest", name: "Mistral Large" },
-      { id: "mistral-small-latest", name: "Mistral Small" },
-      { id: "codestral-latest", name: "Codestral (Dasturchilar)" },
-      { id: "open-mistral-nemo", name: "Mistral Nemo" },
+      { id: "mistral-large-latest", name: "Mistral Large", isFree: false },
+      { id: "mistral-small-latest", name: "Mistral Small", isFree: false },
+      { id: "codestral-latest", name: "Codestral (Dasturchilar uchun)", isFree: false },
+      { id: "open-mistral-nemo", name: "Mistral Nemo", isFree: false },
     ],
   },
   {
@@ -160,11 +190,13 @@ export const PROVIDERS: ProviderOption[] = [
     placeholder: "together_api_key...",
     defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     defaultBaseUrl: "https://api.together.xyz/v1",
+    hasFree: false,
+    hasPaid: true,
     models: [
-      { id: "meta-llama/Llama-3.3-70B-Instruct-Turbo", name: "Llama 3.3 70B Turbo" },
-      { id: "deepseek-ai/DeepSeek-R1", name: "DeepSeek R1" },
-      { id: "deepseek-ai/DeepSeek-V3", name: "DeepSeek V3" },
-      { id: "Qwen/Qwen2.5-72B-Instruct-Turbo", name: "Qwen 2.5 72B Turbo" },
+      { id: "meta-llama/Llama-3.3-70B-Instruct-Turbo", name: "Llama 3.3 70B Turbo", isFree: false },
+      { id: "deepseek-ai/DeepSeek-R1", name: "DeepSeek R1", isFree: false },
+      { id: "deepseek-ai/DeepSeek-V3", name: "DeepSeek V3", isFree: false },
+      { id: "Qwen/Qwen2.5-72B-Instruct-Turbo", name: "Qwen 2.5 72B Turbo", isFree: false },
     ],
   },
   {
@@ -173,21 +205,61 @@ export const PROVIDERS: ProviderOption[] = [
     placeholder: "pplx-...",
     defaultModel: "sonar-pro",
     defaultBaseUrl: "https://api.perplexity.ai",
+    hasFree: false,
+    hasPaid: true,
     models: [
-      { id: "sonar-pro", name: "Sonar Pro (Qidiruvli chuqur)" },
-      { id: "sonar", name: "Sonar (Tezkor qidiruv)" },
-      { id: "sonar-reasoning", name: "Sonar Reasoning" },
+      { id: "sonar-pro", name: "Sonar Pro (Qidiruvli chuqur)", isFree: false },
+      { id: "sonar", name: "Sonar (Tezkor qidiruv)", isFree: false },
+      { id: "sonar-reasoning", name: "Sonar Reasoning", isFree: false },
     ],
   },
   {
     value: "custom",
-    label: "Custom / Boshqa (OpenAI-mos)",
-    placeholder: "sk-...",
-    defaultModel: "",
-    defaultBaseUrl: "",
-    models: [],
+    label: "Custom / Local (Ollama, vLLM)",
+    placeholder: "sk-... yoki ollama",
+    defaultModel: "llama3",
+    defaultBaseUrl: "http://localhost:11434/v1",
+    hasFree: true,
+    hasPaid: true,
+    models: [
+      { id: "llama3", name: "Ollama Llama 3 (Mahalliy bepul)", isFree: true },
+      { id: "mistral", name: "Ollama Mistral (Mahalliy bepul)", isFree: true },
+      { id: "qwen2.5", name: "Ollama Qwen 2.5 (Mahalliy bepul)", isFree: true },
+      { id: "deepseek-r1", name: "Ollama DeepSeek R1 (Mahalliy bepul)", isFree: true },
+      { id: "custom-paid", name: "Custom Pullik Proxy / Model", isFree: false },
+    ],
   },
 ];
+
+export function isModelFree(modelId: string): boolean {
+  if (!modelId) return false;
+  if (modelId.endsWith(":free")) return true;
+  const lower = modelId.toLowerCase();
+  if (
+    lower.includes("gpt-oss") ||
+    lower.includes("llama-3.1-8b") ||
+    lower.includes("qwen3.8") ||
+    lower.includes("distill-llama") ||
+    lower.includes("mixtral") ||
+    lower.includes("gemma2") ||
+    lower.includes("ollama") ||
+    lower.includes("vllm") ||
+    lower === "llama3" ||
+    lower === "mistral" ||
+    lower === "qwen2.5" ||
+    lower === "deepseek-r1"
+  ) {
+    return true;
+  }
+  if (lower.startsWith("gemini-") && !lower.includes("2.5-pro")) {
+    return true;
+  }
+  for (const p of PROVIDERS) {
+    const found = p.models.find((m) => m.id === modelId);
+    if (found && typeof found.isFree === "boolean") return found.isFree;
+  }
+  return false;
+}
 
 type SettingsTab = "keys" | "model" | "appearance" | "account" | "data" | "about";
 
@@ -201,6 +273,10 @@ export default function SettingsModal({ open, onClose }: Props) {
   const [showForm, setShowForm] = useState(false);
   const [testingKeyId, setTestingKeyId] = useState<string | null>(null);
   const [keyTestStatus, setKeyTestStatus] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
+
+  // Pricing toggle state (Free vs Paid)
+  const [pricingTier, setPricingTier] = useState<"free" | "paid">("free");
+  const [listFilter, setListFilter] = useState<"all" | "free" | "paid">("all");
 
   // New key form state
   const [provider, setProvider] = useState<Provider>("groq");
@@ -271,15 +347,55 @@ export default function SettingsModal({ open, onClose }: Props) {
     setLoading(false);
   }
 
+  function onPricingTierChange(tier: "free" | "paid") {
+    setPricingTier(tier);
+    setError("");
+    const available = PROVIDERS.filter((p) => (tier === "free" ? p.hasFree : p.hasPaid));
+    const targetProvider = available.find((p) => p.value === provider) || available[0];
+    if (targetProvider) {
+      setProvider(targetProvider.value);
+      const targetModels = targetProvider.models.filter((m) =>
+        tier === "free" ? m.isFree : !m.isFree
+      );
+      if (targetModels.length > 0) {
+        setIsCustomModel(false);
+        setCustomModelName("");
+        setModel(targetModels[0].id);
+      } else if (targetProvider.models.length > 0) {
+        setIsCustomModel(false);
+        setCustomModelName("");
+        setModel(targetProvider.models[0].id);
+      } else {
+        setIsCustomModel(true);
+        setCustomModelName("");
+        setModel("");
+      }
+      setBaseUrl(targetProvider.defaultBaseUrl);
+    }
+  }
+
   function onProviderChange(p: Provider) {
     setProvider(p);
     setError("");
     setDiscoveredModels([]);
     const found = PROVIDERS.find((x) => x.value === p);
     if (found) {
-      setIsCustomModel(found.models.length === 0);
-      setCustomModelName("");
-      setModel(found.defaultModel);
+      const tierModels = found.models.filter((m) =>
+        pricingTier === "free" ? m.isFree : !m.isFree
+      );
+      if (tierModels.length > 0) {
+        setIsCustomModel(false);
+        setCustomModelName("");
+        setModel(tierModels[0].id);
+      } else if (found.models.length > 0) {
+        setIsCustomModel(false);
+        setCustomModelName("");
+        setModel(found.models[0].id);
+      } else {
+        setIsCustomModel(true);
+        setCustomModelName("");
+        setModel("");
+      }
       setBaseUrl(found.defaultBaseUrl);
     }
   }
@@ -622,7 +738,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                     <button
                       onClick={() => {
                         setShowForm(true);
-                        onProviderChange("groq");
+                        onPricingTierChange("free");
                       }}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-neutral-950 text-xs font-semibold hover:bg-neutral-200 transition cursor-pointer"
                     >
@@ -630,6 +746,46 @@ export default function SettingsModal({ open, onClose }: Props) {
                       Yangi kalit
                     </button>
                   </div>
+
+                  {keys.length > 0 && (
+                    <div className="flex items-center gap-1.5 mb-3 p-1 rounded-xl bg-neutral-950 border border-neutral-800">
+                      <button
+                        type="button"
+                        onClick={() => setListFilter("all")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                          listFilter === "all"
+                            ? "bg-neutral-800 text-white shadow-sm"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        Barchasi ({keys.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setListFilter("free")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                          listFilter === "free"
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        <span>🎁</span>
+                        <span>Bepul ({keys.filter((k) => isModelFree(k.model)).length})</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setListFilter("paid")}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                          listFilter === "paid"
+                            ? "bg-indigo-600 text-white shadow-sm"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        <span>💎</span>
+                        <span>Pullik ({keys.filter((k) => !isModelFree(k.model)).length})</span>
+                      </button>
+                    </div>
+                  )}
 
                   {loading ? (
                     <div className="text-center py-10 text-neutral-500 text-sm">Yuklanmoqda...</div>
@@ -643,7 +799,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                       <button
                         onClick={() => {
                           setShowForm(true);
-                          onProviderChange("groq");
+                          onPricingTierChange("free");
                         }}
                         className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white text-neutral-950 text-xs font-medium hover:bg-neutral-200 transition cursor-pointer"
                       >
@@ -653,23 +809,42 @@ export default function SettingsModal({ open, onClose }: Props) {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {keys.map((k) => (
-                        <div
-                          key={k.id}
-                          className="p-3.5 rounded-xl border border-neutral-800 bg-neutral-950/60 hover:border-neutral-700/80 transition"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-sm text-neutral-100 truncate">
-                                  {k.name}
-                                </span>
-                                {k.is_default && (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800/80 text-emerald-300">
-                                    ASOSIY (DEFAULT)
-                                  </span>
-                                )}
-                              </div>
+                      {keys
+                        .filter((k) =>
+                          listFilter === "all"
+                            ? true
+                            : listFilter === "free"
+                            ? isModelFree(k.model)
+                            : !isModelFree(k.model)
+                        )
+                        .map((k) => {
+                          const isFree = isModelFree(k.model);
+                          return (
+                            <div
+                              key={k.id}
+                              className="p-3.5 rounded-xl border border-neutral-800 bg-neutral-950/60 hover:border-neutral-700/80 transition"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-sm text-neutral-100 truncate">
+                                      {k.name}
+                                    </span>
+                                    {isFree ? (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-800 text-emerald-300">
+                                        🎁 BEPUL
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-950/90 border border-indigo-800 text-indigo-300">
+                                        💎 PULLIK
+                                      </span>
+                                    )}
+                                    {k.is_default && (
+                                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800/80 text-emerald-300">
+                                        ASOSIY (DEFAULT)
+                                      </span>
+                                    )}
+                                  </div>
                               <div className="text-xs text-neutral-400 mt-1 flex items-center gap-2">
                                 <span className="px-1.5 py-0.5 rounded bg-neutral-800 font-mono text-[11px] uppercase">
                                   {k.provider}
@@ -743,10 +918,56 @@ export default function SettingsModal({ open, onClose }: Props) {
                     <h3 className="text-sm font-semibold text-neutral-100">Yangi API Kalit qo‘shish</h3>
                     <button
                       onClick={() => setShowForm(false)}
-                      className="text-xs text-neutral-400 hover:text-white"
+                      className="text-xs text-neutral-400 hover:text-white cursor-pointer"
                     >
                       Orqaga qaytish
                     </button>
+                  </div>
+
+                  {/* TOGGLE: BEPUL (FREE) VS PULLIK (PAID) */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-neutral-300 uppercase tracking-wide">
+                      Model toifasi (Bepul yoki Pullik) *
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-neutral-950 border border-neutral-800">
+                      <button
+                        type="button"
+                        onClick={() => onPricingTierChange("free")}
+                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                          pricingTier === "free"
+                            ? "bg-emerald-600 text-white shadow-md shadow-emerald-950"
+                            : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"
+                        }`}
+                      >
+                        <span className="text-sm">🎁</span>
+                        <span>Bepul modellar (Free)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onPricingTierChange("paid")}
+                        className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                          pricingTier === "paid"
+                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-950"
+                            : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900"
+                        }`}
+                      >
+                        <span className="text-sm">💎</span>
+                        <span>Pullik modellar (Paid)</span>
+                      </button>
+                    </div>
+                    <div className="px-3 py-2 rounded-lg bg-neutral-900/60 border border-neutral-800/80 text-[11px] text-neutral-400 flex items-center gap-2">
+                      {pricingTier === "free" ? (
+                        <>
+                          <span className="text-emerald-400 font-bold shrink-0">● Bepul rejim:</span>
+                          <span>Groq, Google AI Studio va OpenRouter :free modellari. Hisobda mablag‘ talab qilinmaydi.</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-indigo-400 font-bold shrink-0">● Pullik rejim:</span>
+                          <span>ChatGPT-4o, Claude 3.5 Sonnet, DeepSeek R1, Grok flagman modellar.</span>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -758,7 +979,7 @@ export default function SettingsModal({ open, onClose }: Props) {
                       onChange={(e) => onProviderChange(e.target.value as Provider)}
                       className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 text-sm bg-neutral-950 text-neutral-100 focus:border-neutral-600 focus:outline-none cursor-pointer"
                     >
-                      {PROVIDERS.map((p) => (
+                      {PROVIDERS.filter((p) => (pricingTier === "free" ? p.hasFree : p.hasPaid)).map((p) => (
                         <option key={p.value} value={p.value} className="bg-neutral-900 text-neutral-100">
                           {p.label}
                         </option>
@@ -796,9 +1017,18 @@ export default function SettingsModal({ open, onClose }: Props) {
                         ...currentProvider.models,
                         ...discoveredModels
                           .filter((id) => !currentProvider.models.some((m) => m.id === id))
-                          .map((id) => ({ id, name: `${id} (Hisobingizdagi faol)` })),
+                          .map((id) => ({
+                            id,
+                            name: `${id} (Hisobingizdagi faol)`,
+                            isFree: pricingTier === "free",
+                          })),
                       ];
-                      return combinedModels.length > 0 ? (
+
+                      const tierFiltered = combinedModels.filter((m) =>
+                        pricingTier === "free" ? m.isFree === true : m.isFree !== true
+                      );
+
+                      return tierFiltered.length > 0 ? (
                         <div className="space-y-2">
                           <select
                             value={isCustomModel ? "__custom__" : model}
@@ -813,9 +1043,9 @@ export default function SettingsModal({ open, onClose }: Props) {
                             }}
                             className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 text-sm focus:border-neutral-600 focus:outline-none cursor-pointer"
                           >
-                            {combinedModels.map((m) => (
+                            {tierFiltered.map((m) => (
                               <option key={m.id} value={m.id} className="bg-neutral-900 text-neutral-100">
-                                {m.name}
+                                {m.name} {m.isFree ? "— 🎁 BEPUL" : "— 💎 PULLIK"}
                               </option>
                             ))}
                             <option value="__custom__" className="bg-neutral-900 text-neutral-100">
@@ -833,12 +1063,14 @@ export default function SettingsModal({ open, onClose }: Props) {
                           )}
                         </div>
                       ) : (
-                        <input
-                          value={model}
-                          onChange={(e) => setModel(e.target.value)}
-                          placeholder="Model nomini kiriting (masalan: gpt-4o)"
-                          className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
-                        />
+                        <div className="space-y-2">
+                          <input
+                            value={model}
+                            onChange={(e) => setModel(e.target.value)}
+                            placeholder="Model nomini kiriting (masalan: gpt-4o)"
+                            className="w-full h-11 px-3.5 rounded-xl border border-neutral-800 bg-neutral-950 text-neutral-100 placeholder:text-neutral-500 text-sm focus:border-neutral-600 focus:outline-none"
+                          />
+                        </div>
                       );
                     })()}
                   </div>
