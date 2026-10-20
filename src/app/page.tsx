@@ -11,19 +11,38 @@ function AuthScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
-    const result = isLogin
-      ? await signIn(email, password)
-      : await signUp(email, password);
-
-    if (result.error) {
-      setError(result.error);
+    if (isLogin) {
+      const result = await signIn(email, password);
+      if (result.error) {
+        if (result.error.toLowerCase().includes("invalid login credentials")) {
+          setError("Email yoki parol noto‘g‘ri. Agar ro‘yxatdan o‘tmagan bo‘lsangiz, 'Ro‘yxatdan o‘tish' tugmasini bosing.");
+        } else {
+          setError(result.error);
+        }
+      }
+    } else {
+      const result = await signUp(email, password);
+      if (result.error) {
+        if (result.error.includes("security purposes")) {
+          setError("Xavfsizlik yuzasidan cheklov: Qayta urinish uchun biroz kuting. Agar hisob yaratib bo‘lgan bo‘lsangiz, 'Kirish' bo‘limidan kiring.");
+        } else {
+          setError(result.error);
+        }
+      } else {
+        if (!result.data?.session) {
+          setSuccess("Ro‘yxatdan o‘tish muvaffaqiyatli yakunlandi! Emailingizga tasdiqlash havolasi yuborildi (pochtangizni tekshiring). Tasdiqlagach 'Kirish' orqali kiring.");
+          setIsLogin(true);
+        }
+      }
     }
     setLoading(false);
   }
@@ -83,6 +102,12 @@ function AuthScreen() {
               />
             </div>
 
+            {success && (
+              <p className="text-sm text-emerald-400 bg-emerald-950/60 border border-emerald-900/60 px-3.5 py-2.5 rounded-lg">
+                {success}
+              </p>
+            )}
+
             {error && (
               <p className="text-sm text-red-400 bg-red-950/50 border border-red-900/50 px-3 py-2 rounded-lg">
                 {error}
@@ -104,6 +129,7 @@ function AuthScreen() {
               onClick={() => {
                 setIsLogin(!isLogin);
                 setError("");
+                setSuccess("");
               }}
               className="text-white font-medium hover:underline cursor-pointer"
             >
