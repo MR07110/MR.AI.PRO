@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #ffffff;
+  --bg-secondary: #f7f7f8;
+  --bg-sidebar: #f9f9f9;
+  --border: #e5e5e5;
+  --border-light: #f0f0f0;
+  --text: #0d0d0d;
+  --text-secondary: #6b6b6b;
+  --text-muted: #8e8e8e;
+  --accent: #0d0d0d;
+  --accent-hover: #2a2a2a;
+  --user-bubble: #f4f4f4;
+  --assistant-bubble: transparent;
+  --input-bg: #ffffff;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Clean scrollbar - like modern apps */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d1d1d1;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b0b0b0;
+}
+
+/* Focus rings */
+input:focus, textarea:focus, button:focus-visible {
+  outline: 2px solid #0d0d0d;
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: #e5e5e5;
+}
