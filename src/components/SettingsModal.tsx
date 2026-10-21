@@ -327,9 +327,15 @@ export default function SettingsModal({ open, onClose }: Props) {
 
   useEffect(() => {
     if (open) {
-      const savedServer = typeof window !== "undefined"
-        ? localStorage.getItem("mrai_server_url") || "https://satisfy-endurance-mooned.ngrok-free.dev"
-        : "https://satisfy-endurance-mooned.ngrok-free.dev";
+      let savedServer = typeof window !== "undefined"
+        ? localStorage.getItem("mrai_server_url")
+        : null;
+      if (!savedServer || savedServer.includes("trycloudflare.com")) {
+        savedServer = "https://satisfy-endurance-mooned.ngrok-free.dev";
+        if (typeof window !== "undefined") {
+          localStorage.setItem("mrai_server_url", savedServer);
+        }
+      }
       setServerUrl(savedServer);
       if (savedServer) {
         checkServer(savedServer, false);
@@ -352,15 +358,34 @@ export default function SettingsModal({ open, onClose }: Props) {
       }
       return;
     }
-    const finalUrl = clean.startsWith("http://") || clean.startsWith("https://") ? clean : `https://${clean}`;
+    let finalUrl = clean.startsWith("http://") || clean.startsWith("https://") ? clean : `https://${clean}`;
+    if (finalUrl.includes("trycloudflare.com")) {
+      finalUrl = "https://satisfy-endurance-mooned.ngrok-free.dev";
+    }
     setServerChecking(true);
     setServerStatus(null);
     try {
-      const res = await fetch(finalUrl.replace(/\/+$/, "") + "/", {
-        headers: { "ngrok-skip-browser-warning": "1" },
-        signal: AbortSignal.timeout(6000),
-      });
-      const data = await res.json();
+      let data: any = null;
+      try {
+        const res = await fetch(finalUrl.replace(/\/+$/, "") + "/", {
+          headers: { "ngrok-skip-browser-warning": "1" },
+          signal: AbortSignal.timeout(6000),
+        });
+        data = await res.json();
+      } catch {
+        const proxyRes = await fetch("/api/server/exec", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-server-url": finalUrl
+          },
+          body: JSON.stringify({ command: "echo ok" })
+        });
+        const proxyData = await proxyRes.json();
+        if (proxyData.exit_code === 0) {
+          data = { status: "ok", server: "MR AI Local Linux Server" };
+        }
+      }
       if (data.status === "ok") {
         setServerStatus({
           ok: true,

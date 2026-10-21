@@ -65,7 +65,12 @@ function CodeBlock({
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setServerUrl(localStorage.getItem("mrai_server_url") || "https://satisfy-endurance-mooned.ngrok-free.dev");
+      let saved = localStorage.getItem("mrai_server_url");
+      if (!saved || saved.includes("trycloudflare.com")) {
+        saved = "https://satisfy-endurance-mooned.ngrok-free.dev";
+        localStorage.setItem("mrai_server_url", saved);
+      }
+      setServerUrl(saved);
     }
   }, []);
 
@@ -86,25 +91,47 @@ function CodeBlock({
   };
 
   const handleExecuteOnServer = async () => {
-    if (!serverUrl) {
-      handleOpen();
-      return;
-    }
     setRunning(true);
     setRunResult(null);
+
+    let targetUrl = serverUrl;
+    if (!targetUrl || targetUrl.includes("trycloudflare.com")) {
+      targetUrl = "https://satisfy-endurance-mooned.ngrok-free.dev";
+    }
+
     try {
-      const res = await fetch(serverUrl.replace(/\/+$/, "") + "/exec", {
+      // 1. Try direct fetch
+      const res = await fetch(targetUrl.replace(/\/+$/, "") + "/exec", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "ngrok-skip-browser-warning": "1"
         },
-        body: JSON.stringify({ command: value })
+        body: JSON.stringify({ command: value }),
+        signal: AbortSignal.timeout(8000),
       });
       const data = await res.json();
       setRunResult(data);
-    } catch (err: any) {
-      setRunResult({ stdout: "", stderr: "Serverga ulanishda xatolik: " + (err.message || "Xato"), exit_code: 1 });
+    } catch {
+      // 2. Fallback to Next.js API proxy (immune to Brave Shields or CORS blocks)
+      try {
+        const proxyRes = await fetch("/api/server/exec", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-server-url": targetUrl
+          },
+          body: JSON.stringify({ command: value }),
+        });
+        const proxyData = await proxyRes.json();
+        setRunResult(proxyData);
+      } catch (err: any) {
+        setRunResult({
+          stdout: "",
+          stderr: "Serverga ulanishda xatolik: " + (err.message || "Xato"),
+          exit_code: 1
+        });
+      }
     } finally {
       setRunning(false);
     }
@@ -125,10 +152,10 @@ function CodeBlock({
             </div>
             <div>
               <div className="text-xs font-semibold text-neutral-200">
-                {isBash && serverUrl ? "Google Cloud Shell Linux Server" : getArtifactTitle(lang, value)}
+                {isBash && serverUrl ? "MR AI Linux Server (24/7)" : getArtifactTitle(lang, value)}
               </div>
               <div className="text-[10px] text-neutral-400">
-                {isBash && serverUrl ? "Real 64-bit Linux Execution" : "Interaktiv Claude Artifact"}
+                {isBash && serverUrl ? "Real 64-bit Linux Execution (Arch Linux)" : "Interaktiv Claude Artifact"}
               </div>
             </div>
           </div>
@@ -206,7 +233,7 @@ function CodeBlock({
       {running && (
         <div className="border-t border-neutral-800 bg-neutral-950 px-4 py-3 flex items-center gap-2 text-xs font-mono text-neutral-300">
           <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400" />
-          <span>Google Cloud Shell serverida bajarilmoqda...</span>
+          <span>Serverda bajarilmoqda...</span>
         </div>
       )}
       {runResult && (
@@ -214,7 +241,7 @@ function CodeBlock({
           <div className="flex items-center justify-between pb-1 border-b border-neutral-850 text-[11px]">
             <span className="flex items-center gap-1.5 font-semibold text-emerald-400">
               <Terminal className="w-3.5 h-3.5" />
-              <span>Google Cloud Shell Natijasi:</span>
+              <span>Server Natijasi:</span>
             </span>
             <span className={runResult.exit_code === 0 ? "text-emerald-400 font-semibold" : "text-red-400 font-semibold"}>
               Exit Code: {runResult.exit_code}
