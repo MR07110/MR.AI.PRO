@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const DEFAULT_SERVER_URL = "https://satisfy-endurance-mooned.ngrok-free.dev";
+const MRAI_AUTH_TOKEN = "3ea3e345de68425a3ec13279117ff7c4fbbea67a9634f28ee8865c4475b6ef96";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         "ngrok-skip-browser-warning": "1",
+        "Authorization": `Bearer ${MRAI_AUTH_TOKEN}`,
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(30000),

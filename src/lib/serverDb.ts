@@ -51,6 +51,7 @@ function getServerUrl(): string | null {
 const NGROK_HEADERS = {
   'Content-Type': 'application/json',
   'ngrok-skip-browser-warning': '1',
+  'Authorization': 'Bearer 3ea3e345de68425a3ec13279117ff7c4fbbea67a9634f28ee8865c4475b6ef96',
 };
 
 // -------------------------------------------------------------
